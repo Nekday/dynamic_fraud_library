@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}External Systems · Fraud Taxonomy{% endblock %}
+{% block content %}
+  <h1>External Systems <span class="stix">bridge</span></h1>
+  <p class="sub">Registry of detection systems and feeds this taxonomy can reference. New APIs are added here as discovered — a data insert, never a schema change.</p>
+  {% if systems %}
+    <table>
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        {% for s in systems %}
+          <tr><td><strong>{{ s.name }}</strong></td><td class="mono">{{ s.system_type or '—' }}</td><td class="sub">{{ s.description or '' }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}<p class="empty">No external systems registered.</p>{% endif %}
+{% endblock %}

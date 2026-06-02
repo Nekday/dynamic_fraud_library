@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Selectors · Fraud Taxonomy{% endblock %}
+{% block content %}
+  <h1>Selectors / IOCs <span class="stix">STIX: {{ stix_map['selector_value'] }}</span></h1>
+  <p class="sub">Hard technical identifiers observed in real instances: IPs, IMEIs, MACs, crypto wallets, mule accounts, gift-card codes, and more.</p>
+  {% if selectors %}
+    <table>
+      <thead><tr><th>Type</th><th>Value</th><th>Fraud Type</th><th>Context</th></tr></thead>
+      <tbody>
+        {% for sv in selectors %}
+          <tr><td class="mono">{{ sv.selector_type }}</td><td class="mono">{{ sv.value }}</td><td>{{ sv.fraud_type or '—' }}</td><td class="sub">{{ sv.context or '' }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}<p class="empty">No selectors recorded yet. These accrue as observed instances are added.</p>{% endif %}
+{% endblock %}

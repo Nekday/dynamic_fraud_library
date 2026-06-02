@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Review Queue · Fraud Taxonomy{% endblock %}
+{% block content %}
+  <h1>Staging Review</h1>
+  <p class="sub">Human-in-the-loop gate. Nothing reaches the live taxonomy unreviewed. Bulk lane trust-approves provenance-verified batches (hash/selector lists); single lane reviews narrative entries one at a time.</p>
+
+  <div class="lane-tabs">
+    <a href="{{ url_for('review', lane='single') }}" class="{{ 'active' if lane=='single' }}">Single review</a>
+    <a href="{{ url_for('review', lane='bulk') }}" class="{{ 'active' if lane=='bulk' }}">Bulk lane</a>
+  </div>
+
+  {% if lane == 'bulk' %}
+    {% if batches %}
+      {% for b in batches %}
+        <div class="card" style="margin-bottom:1rem">
+          <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap">
+            <strong style="font-size:1.05rem">{{ b.provenance or '(no provenance)' }}</strong>
+            <span class="pill">{{ b.n }} entr{{ 'y' if b.n==1 else 'ies' }}</span>
+          </div>
+
+          <div class="sub" style="margin-top:.5rem; display:grid; grid-template-columns:auto 1fr; gap:.2rem .8rem; max-width:640px">
+            <span style="color:var(--muted)">Origin</span>
+            <span>{{ b.source_name or '—' }}</span>
+            <span style="color:var(--muted)">Source URL</span>
+            <span>{% if b.source_url %}<a href="{{ b.source_url }}" target="_blank" rel="noopener">{{ b.source_url }} ↗</a>{% else %}—{% endif %}</span>
+            <span style="color:var(--muted)">Count</span>
+            <span>{{ b.n }}</span>
+            <span style="color:var(--muted)">Scraped</span>
+            <span>
+              {{ b.first_scraped.strftime('%Y-%m-%d %H:%M') if b.first_scraped else '—' }}
+              {% if b.last_scraped and b.last_scraped != b.first_scraped %} → {{ b.last_scraped.strftime('%Y-%m-%d %H:%M') }}{% endif %}
+            </span>
+          </div>
+
+          <div class="sub" style="margin-top:.7rem; color:var(--muted)">
+            {% if b.showing_all %}Showing all {{ b.n }} entries{% else %}Sample (first {{ b.rows|length }} of {{ b.n }}){% endif %}
+          </div>
+          {% for e in b.rows %}
+            <pre class="mono" style="background:var(--ink); border:1px solid var(--line); border-radius:8px; padding:.6rem; overflow:auto; margin:.35rem 0 0; font-size:.8rem">#{{ e.staging_id }}  {{ e.payload | tojson }}</pre>
+          {% endfor %}
+
+          <div style="display:flex; gap:.5rem; margin-top:.6rem; flex-wrap:wrap; align-items:center">
+            {% if b.has_more %}
+              <a class="btn ghost" href="{{ url_for('review', lane='bulk', expand=b.provenance) }}">View all {{ b.n }} ↓</a>
+            {% elif b.showing_all and b.n > b.sample_size %}
+              <a class="btn ghost" href="{{ url_for('review', lane='bulk') }}">Collapse ↑</a>
+            {% endif %}
+            <form method="post" action="{{ url_for('review_bulk', action='approve') }}">
+              <input type="hidden" name="provenance" value="{{ b.provenance }}">
+              <input type="hidden" name="note" value="bulk approved by provenance">
+              <button type="submit">Approve batch</button>
+            </form>
+            <form method="post" action="{{ url_for('review_bulk', action='reject') }}">
+              <input type="hidden" name="provenance" value="{{ b.provenance }}">
+              <input type="hidden" name="note" value="bulk rejected by provenance">
+              <button type="submit" class="danger">Reject batch</button>
+            </form>
+          </div>
+          <p class="sub" style="margin-top:.5rem; font-style:italic">Approving trusts this provenance and promotes all {{ b.n }} entries to the live taxonomy.</p>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="empty">No pending entries in the bulk lane.</p>
+    {% endif %}
+
+  {% else %}
+    {# Single review lane #}
+    {% if entries %}
+      {% for e in entries %}
+        <div class="card" style="margin-bottom:.8rem">
+          <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap">
+            <span class="pill">#{{ e.staging_id }}</span>
+            {% if e.provenance %}<span class="pill">{{ e.provenance }}</span>{% endif %}
+            {% if e.source_name %}<span class="sub">{{ e.source_name }}</span>{% endif %}
+          </div>
+          {% if e.source_url %}<div class="sub" style="margin-top:.3rem"><a href="{{ e.source_url }}" target="_blank" rel="noopener">{{ e.source_url }} ↗</a></div>{% endif %}
+          <pre class="mono" style="background:var(--ink); border:1px solid var(--line); border-radius:8px; padding:.7rem; overflow:auto; margin-top:.5rem; font-size:.82rem">{{ e.payload | tojson(indent=2) }}</pre>
+          <form method="post" action="{{ url_for('review_action', staging_id=e.staging_id, action='approve') }}" style="margin-top:.6rem">
+            <input type="text" name="note" placeholder="Reviewer note (optional)" style="width:60%">
+            <button type="submit">Approve</button>
+            <button type="submit" formaction="{{ url_for('review_action', staging_id=e.staging_id, action='reject') }}" class="danger">Reject</button>
+          </form>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="empty">No pending entries in the single-review lane.</p>
+    {% endif %}
+  {% endif %}
+
+  <h2>Queue Status</h2>
+  {% if counts %}
+    <table>
+      <thead><tr><th>Lane</th><th>Status</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for c in counts %}<tr><td>{{ c.review_lane }}</td><td>{{ c.status }}</td><td>{{ c.n }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  {% else %}<p class="empty">Staging queue is empty.</p>{% endif %}
+{% endblock %}

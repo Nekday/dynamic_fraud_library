@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Consumer Protection Press Releases</title>
+    <link>https://www.ftc.gov/news-events/news/press-releases</link>
+    <description>FTC consumer protection press releases</description>
+    <item>
+      <title>FTC Acts Against Operators of Cryptocurrency Investment Scam Targeting Older Adults</title>
+      <link>https://www.ftc.gov/news-events/news/press-releases/2026/05/ftc-acts-against-operators-cryptocurrency-investment-scam</link>
+      <pubDate>Wed, 21 May 2026 10:00:00 -0400</pubDate>
+      <description>The FTC charged operators of a scheme that used romance and investment lures to defraud older adults of millions in cryptocurrency.</description>
+    </item>
+    <item>
+      <title>FTC Warns Consumers About Surge in Business Email Compromise Scams</title>
+      <link>https://www.ftc.gov/news-events/news/press-releases/2026/05/ftc-warns-business-email-compromise</link>
+      <pubDate>Mon, 12 May 2026 09:30:00 -0400</pubDate>
+      <description>Scammers impersonate executives and vendors to redirect corporate payments to fraudulent accounts.</description>
+    </item>
+    <item>
+      <title>Operators of Gift-Card Refund Scam Banned from Telemarketing</title>
+      <link>https://www.ftc.gov/news-events/news/press-releases/2026/04/gift-card-refund-scam-banned</link>
+      <pubDate>Tue, 22 Apr 2026 14:15:00 -0400</pubDate>
+      <description>Defendants instructed victims to pay supposed fees via retail gift cards.</description>
+    </item>
+  </channel>
+</rss>

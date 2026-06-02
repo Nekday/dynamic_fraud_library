@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Fraud Taxonomy{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --ink:#11161d; --panel:#161d27; --panel-2:#1d2733;
+      --line:#2b3744; --muted:#8a99a8; --text:#dce4ec;
+      --accent:#d8a657;       /* brass */
+      --accent-2:#7fb4c9;     /* steel blue */
+      --danger:#cf6b5c; --ok:#7fae6e;
+      --hash:#8c7fd0; --selector:#7fb4c9; --behavioral:#d8a657;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; background:
+        radial-gradient(1200px 500px at 80% -10%, #1b2531 0%, transparent 60%),
+        var(--ink);
+      color:var(--text); font-family:"IBM Plex Sans",system-ui,sans-serif;
+      line-height:1.5; -webkit-font-smoothing:antialiased;
+    }
+    a{color:var(--accent-2); text-decoration:none}
+    a:hover{color:var(--accent)}
+    header.top{
+      display:flex; align-items:center; gap:1.2rem; padding:0.9rem 1.4rem;
+      border-bottom:1px solid var(--line);
+      background:linear-gradient(180deg, rgba(255,255,255,.02), transparent);
+      position:sticky; top:0; backdrop-filter:blur(8px); z-index:10;
+    }
+    .brand{font-family:"Spectral",serif; font-weight:700; font-size:1.25rem; letter-spacing:.3px}
+    .brand .dot{color:var(--accent)}
+    nav.top-nav{display:flex; gap:1rem; margin-left:auto; flex-wrap:wrap}
+    nav.top-nav a{font-size:.92rem; padding:.3rem .1rem; border-bottom:2px solid transparent}
+    nav.top-nav a.active{color:var(--accent); border-bottom-color:var(--accent)}
+    .badge{
+      background:var(--accent); color:#1a1206; border-radius:10px;
+      font-size:.72rem; font-weight:600; padding:.05rem .45rem; margin-left:.3rem;
+    }
+    main{max-width:1100px; margin:0 auto; padding:1.6rem 1.4rem 4rem}
+    h1{font-family:"Spectral",serif; font-weight:700; font-size:1.9rem; margin:.2rem 0 .3rem}
+    h2{font-family:"Spectral",serif; font-weight:600; font-size:1.3rem; margin:1.6rem 0 .6rem;
+       padding-bottom:.3rem; border-bottom:1px solid var(--line)}
+    .sub{color:var(--muted); font-size:.95rem}
+    .stix{font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--muted);
+          border:1px solid var(--line); border-radius:5px; padding:.05rem .4rem; margin-left:.4rem}
+    .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:1rem; margin-top:1rem}
+    .card{
+      background:linear-gradient(160deg,var(--panel),var(--panel-2));
+      border:1px solid var(--line); border-radius:12px; padding:1.1rem 1.2rem;
+      transition:transform .12s ease, border-color .12s ease;
+    }
+    .card:hover{transform:translateY(-2px); border-color:var(--accent)}
+    .card h3{margin:.1rem 0 .4rem; font-family:"Spectral",serif; font-size:1.15rem}
+    .card .summary{color:var(--muted); font-size:.9rem}
+    .meta{display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.7rem}
+    .pill{font-size:.74rem; padding:.12rem .55rem; border-radius:20px; border:1px solid var(--line); color:var(--muted)}
+    .pill.sev{border-color:var(--danger); color:var(--danger)}
+    .pill.cat{border-color:var(--accent-2); color:var(--accent-2)}
+    .controls{display:flex; gap:.8rem; flex-wrap:wrap; margin:1.1rem 0; align-items:center}
+    input[type=text],select{
+      background:var(--panel); border:1px solid var(--line); color:var(--text);
+      border-radius:8px; padding:.5rem .7rem; font-family:inherit; font-size:.92rem; min-width:200px;
+    }
+    button,.btn{
+      background:var(--accent); color:#1a1206; border:none; border-radius:8px;
+      padding:.5rem .9rem; font-family:inherit; font-weight:600; font-size:.9rem; cursor:pointer;
+    }
+    button.ghost,.btn.ghost{background:transparent; color:var(--text); border:1px solid var(--line)}
+    button.danger{background:var(--danger); color:#1a0d0a}
+    table{width:100%; border-collapse:collapse; margin-top:.6rem; font-size:.9rem}
+    th,td{text-align:left; padding:.55rem .6rem; border-bottom:1px solid var(--line); vertical-align:top}
+    th{color:var(--muted); font-weight:600; font-size:.78rem; text-transform:uppercase; letter-spacing:.5px}
+    code,.mono{font-family:"IBM Plex Mono",monospace; font-size:.85rem}
+    .tag-class{font-family:"IBM Plex Mono",monospace; font-size:.72rem; padding:.1rem .45rem; border-radius:5px; font-weight:500}
+    .c-hash{background:rgba(140,127,208,.18); color:var(--hash); border:1px solid var(--hash)}
+    .c-selector{background:rgba(127,180,201,.16); color:var(--selector); border:1px solid var(--selector)}
+    .c-behavioral{background:rgba(216,166,87,.16); color:var(--behavioral); border:1px solid var(--behavioral)}
+    .conf{font-size:.74rem; padding:.05rem .4rem; border-radius:4px}
+    .conf.low{color:var(--muted)} .conf.medium{color:var(--accent)} .conf.high{color:var(--ok)}
+    .dimblock{margin:.5rem 0}
+    .dimblock .dim{font-size:.74rem; text-transform:uppercase; letter-spacing:.6px; color:var(--muted)}
+    .dimblock .vals{display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.25rem}
+    .flash{padding:.6rem 1rem; border-radius:8px; margin:.5rem 0; font-size:.9rem}
+    .flash.success{background:rgba(127,174,110,.15); border:1px solid var(--ok); color:var(--ok)}
+    .flash.error{background:rgba(207,107,92,.15); border:1px solid var(--danger); color:var(--danger)}
+    .phase-row td:first-child{color:var(--accent); font-weight:600; white-space:nowrap}
+    .empty{color:var(--muted); font-style:italic; padding:.8rem 0}
+    .lane-tabs{display:flex; gap:.5rem; margin:1rem 0}
+    .lane-tabs a{padding:.4rem .9rem; border:1px solid var(--line); border-radius:8px; color:var(--text)}
+    .lane-tabs a.active{background:var(--accent); color:#1a1206; border-color:var(--accent)}
+    .heur{color:var(--text); font-size:.88rem}
+    .fp{color:var(--muted); font-size:.82rem; font-style:italic; margin-top:.3rem}
+    footer{max-width:1100px; margin:0 auto; padding:1rem 1.4rem 3rem; color:var(--muted); font-size:.8rem; border-top:1px solid var(--line)}
+  </style>
+</head>
+<body>
+  <header class="top">
+    <span class="brand">Fraud&nbsp;Taxonomy<span class="dot">.</span></span>
+    <nav class="top-nav">
+      <a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint=='index' }}">Types</a>
+      <a href="{{ url_for('signals') }}" class="{{ 'active' if request.endpoint=='signals' }}">Signals</a>
+      <a href="{{ url_for('selectors') }}" class="{{ 'active' if request.endpoint=='selectors' }}">Selectors</a>
+      <a href="{{ url_for('systems') }}" class="{{ 'active' if request.endpoint=='systems' }}">Systems</a>
+      <a href="{{ url_for('review') }}" class="{{ 'active' if request.endpoint=='review' }}">Review{% if pending %}<span class="badge">{{ pending }}</span>{% endif %}</a>
+    </nav>
+  </header>
+  <main>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat,msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    Fraud Taxonomy &middot; STIX-aligned, HUMINT-phased &middot; local build on PostgreSQL
+  </footer>
+</body>
+</html>

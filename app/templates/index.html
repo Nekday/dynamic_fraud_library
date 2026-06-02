@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Fraud Types · Fraud Taxonomy{% endblock %}
+{% block content %}
+  <h1>Fraud Types <span class="stix">STIX: {{ stix_map['fraud_type'] }}</span></h1>
+  <p class="sub">The taxonomy spine. Search the corpus or filter by how a scheme leverages AI.</p>
+
+  <form class="controls" method="get" action="{{ url_for('index') }}">
+    <input type="text" name="q" placeholder="Search types, summaries, descriptions…" value="{{ search }}">
+    <select name="ai">
+      <option value="">— any AI-leverage —</option>
+      {% for v in ai_values %}
+        <option value="{{ v }}" {{ 'selected' if v==ai_selected }}>{{ v }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Filter</button>
+    {% if search or ai_selected %}<a class="btn ghost" href="{{ url_for('index') }}">Clear</a>{% endif %}
+  </form>
+
+  {% if fraud_types %}
+    <div class="grid">
+      {% for ft in fraud_types %}
+        <a class="card" href="{{ url_for('fraud_type_detail', fraud_type_id=ft.fraud_type_id) }}" style="color:inherit">
+          <h3>{{ ft.name }}</h3>
+          <div class="summary">{{ ft.summary }}</div>
+          <div class="meta">
+            {% if ft.category %}<span class="pill cat">{{ ft.category }}</span>{% endif %}
+            {% if ft.severity %}<span class="pill sev">severity {{ ft.severity }}</span>{% endif %}
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="empty">No fraud types match. Try clearing the filters.</p>
+  {% endif %}
+{% endblock %}

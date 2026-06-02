@@ -1,0 +1,20 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Environment / secrets
+.env
+*.log
+
+# OS
+.DS_Store
+
+# Scraper debugging artifacts (captured live responses, e.g. bot-challenge pages)
+fixtures/*_live.html
+
+# Local database dumps
+*.dump
+*.sql.bak

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Signals · Fraud Taxonomy{% endblock %}
+{% block content %}
+  <h1>Detection Signals <span class="stix">STIX: {{ stix_map['signal'] }}</span></h1>
+  <p class="sub">All detection signals across the three paradigms — hash, selector, behavioral. The behavioral signals are the bridge to classifier guidelines.</p>
+  {% if signals %}
+    {% for s in signals %}
+      <div class="card" style="margin-bottom:.7rem">
+        <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap">
+          <span class="tag-class c-{{ s.signal_class }}">{{ s.signal_class }}</span>
+          <strong>{{ s.name }}</strong>
+          {% if s.fraud_type %}<a class="pill" href="{{ url_for('index') }}">{{ s.fraud_type }}</a>{% endif %}
+          {% if s.confidence %}<span class="conf {{ s.confidence }}">confidence: {{ s.confidence }}</span>{% endif %}
+          {% if s.ttp_phase %}<span class="pill">{{ s.ttp_phase }}</span>{% endif %}
+        </div>
+        {% if s.detection_heuristic %}<div class="heur" style="margin-top:.5rem">{{ s.detection_heuristic }}</div>{% endif %}
+        {% if s.false_positive_note %}<div class="fp">⚑ False positives: {{ s.false_positive_note }}</div>{% endif %}
+      </div>
+    {% endfor %}
+  {% else %}<p class="empty">No signals recorded.</p>{% endif %}
+{% endblock %}

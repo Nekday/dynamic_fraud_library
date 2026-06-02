@@ -1,0 +1,8 @@
+# Flask app
+Flask>=3.0
+psycopg[binary]>=3.1
+
+# Scraper
+requests>=2.31
+beautifulsoup4>=4.12
+openpyxl>=3.1

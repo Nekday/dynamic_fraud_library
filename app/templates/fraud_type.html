@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ ft.name }} · Fraud Taxonomy{% endblock %}
+{% block content %}
+  <p class="sub"><a href="{{ url_for('index') }}">← All types</a></p>
+  <h1>{{ ft.name }}</h1>
+  <div class="meta">
+    {% if ft.category %}<span class="pill cat">{{ ft.category }}</span>{% endif %}
+    {% if ft.severity %}<span class="pill sev">severity {{ ft.severity }}</span>{% endif %}
+    {% if ft.aliases %}<span class="pill">aka {{ ft.aliases }}</span>{% endif %}
+  </div>
+  <p style="margin-top:1rem">{{ ft.summary }}</p>
+  {% if ft.description %}<p class="sub">{{ ft.description }}</p>{% endif %}
+  {% if ft.typical_targets %}<p class="sub"><strong>Typical targets:</strong> {{ ft.typical_targets }}</p>{% endif %}
+  {% if ft.estimated_prevalence %}<p class="sub"><strong>Prevalence:</strong> {{ ft.estimated_prevalence }}</p>{% endif %}
+
+  <h2>Tag Dimensions</h2>
+  {% if tags %}
+    {% for dim, vals in tags.items() %}
+      <div class="dimblock">
+        <div class="dim">{{ dim.replace('_',' ') }}</div>
+        <div class="vals">{% for v in vals %}<span class="pill">{{ v }}</span>{% endfor %}</div>
+      </div>
+    {% endfor %}
+  {% else %}<p class="empty">No tags recorded.</p>{% endif %}
+
+  <h2>TTPs by HUMINT Phase <span class="stix">STIX: {{ stix_map['ttp'] }}</span></h2>
+  {% if ttps %}
+    <table>
+      <thead><tr><th>Phase</th><th>Technique</th><th>Description</th></tr></thead>
+      <tbody>
+        {% for t in ttps %}
+          <tr class="phase-row"><td>{{ t.phase or '—' }}</td><td>{{ t.technique }}</td><td class="sub">{{ t.description or '' }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}<p class="empty">No TTPs recorded.</p>{% endif %}
+
+  <h2>Detection Signals <span class="stix">STIX: {{ stix_map['signal'] }}</span></h2>
+  {% if signals %}
+    {% for s in signals %}
+      <div class="card" style="margin-bottom:.7rem">
+        <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap">
+          <span class="tag-class c-{{ s.signal_class }}">{{ s.signal_class }}</span>
+          <strong>{{ s.name }}</strong>
+          {% if s.confidence %}<span class="conf {{ s.confidence }}">confidence: {{ s.confidence }}</span>{% endif %}
+          {% if s.ttp_phase %}<span class="pill">{{ s.ttp_phase }}</span>{% endif %}
+        </div>
+        {% if s.detection_heuristic %}<div class="heur" style="margin-top:.5rem">{{ s.detection_heuristic }}</div>{% endif %}
+        {% if s.false_positive_note %}<div class="fp">⚑ False positives: {{ s.false_positive_note }}</div>{% endif %}
+      </div>
+    {% endfor %}
+  {% else %}<p class="empty">No signals recorded.</p>{% endif %}
+
+  <h2>Selectors (IOCs) <span class="stix">STIX: {{ stix_map['selector_value'] }}</span></h2>
+  {% if selectors %}
+    <table>
+      <thead><tr><th>Type</th><th>Value</th><th>Context</th></tr></thead>
+      <tbody>
+        {% for sv in selectors %}
+          <tr><td class="mono">{{ sv.selector_type }}</td><td class="mono">{{ sv.value }}</td><td class="sub">{{ sv.context or '' }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}<p class="empty">No selectors recorded yet (these accrue from observed instances).</p>{% endif %}
+
+  <h2>Profiles</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Fraudster <span class="stix">STIX: {{ stix_map['fraudster_profile'] }}</span></h3>
+      {% if profiles.fraudster %}
+        {% for fp in profiles.fraudster %}
+          <p class="sub"><strong>Organization:</strong> {{ fp.organization_type or '—' }}</p>
+          <p class="sub"><strong>Motivation:</strong> {{ fp.motivation or '—' }}</p>
+          <p class="sub"><strong>Sophistication:</strong> {{ fp.sophistication or '—' }}</p>
+          <p class="sub"><strong>Origin:</strong> {{ fp.typical_origin_region or '—' }}</p>
+          {% if fp.modus_narrative %}<p style="margin-top:.5rem">{{ fp.modus_narrative }}</p>{% endif %}
+        {% endfor %}
+      {% else %}<p class="empty">No fraudster profile.</p>{% endif %}
+    </div>
+    <div class="card">
+      <h3>Victim / Intermediary <span class="stix">custom</span></h3>
+      {% if profiles.victim %}
+        {% for vp in profiles.victim %}
+          <p class="sub"><strong>Demographic:</strong> {{ vp.demographic or '—' }}</p>
+          <p class="sub"><strong>Susceptibility:</strong> {{ vp.susceptibility_factor or '—' }}</p>
+          <p class="sub"><strong>Motivation:</strong> {{ vp.victim_motivation or '—' }}</p>
+          <p class="sub"><strong>Loss profile:</strong> {{ vp.typical_loss_profile or '—' }}</p>
+          {% if vp.trauma_consideration %}<p style="margin-top:.5rem"><strong>Trauma-informed note:</strong> {{ vp.trauma_consideration }}</p>{% endif %}
+        {% endfor %}
+      {% else %}<p class="empty">No victim profile.</p>{% endif %}
+    </div>
+  </div>
+
+  <h2>Observations <span class="stix">STIX: {{ stix_map['observation'] }}</span></h2>
+  {% if observations %}
+    {% for o in observations %}
+      <div class="card" style="margin-bottom:.7rem">
+        <strong>{{ o.title }}</strong>
+        {% if o.occurred_year %}<span class="pill">{{ o.occurred_year }}</span>{% endif %}
+        {% if o.loss_estimate %}<span class="pill sev">{{ o.loss_estimate }}</span>{% endif %}
+        {% if o.narrative %}<div class="sub" style="margin-top:.4rem">{{ o.narrative }}</div>{% endif %}
+        <div class="sub" style="margin-top:.4rem">
+          {% if o.agency %}{{ o.agency }}{% endif %}
+          {% if o.jurisdiction %} · {{ o.jurisdiction }}{% endif %}
+          {% if o.source_url %} · <a href="{{ o.source_url }}" target="_blank" rel="noopener">source ↗</a>{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}<p class="empty">No observations recorded.</p>{% endif %}
+{% endblock %}
