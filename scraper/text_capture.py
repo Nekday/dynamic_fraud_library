@@ -45,13 +45,20 @@ import eei_extractor
 # ---------------------------------------------------------------
 
 # Tier 1: structural elements that never contain article body.
-_DROP_TAGS = ["script", "style", "nav", "header", "footer", "form",
+# Tier 1: structural elements that never contain article body.
+# NOTE: <form> is handled separately (see clean_html_to_text) because some CMS
+# platforms (e.g. SharePoint) wrap the ENTIRE page — including the article — in
+# one big ASP.NET <form>. Blindly removing <form> there deletes the content.
+_DROP_TAGS = ["script", "style", "nav", "header", "footer",
               "aside", "noscript", "svg", "button", "iframe"]
 
 # Tier 2: known recurring boilerplate phrases (case-insensitive substring match).
 # Conservative — only lines that are clearly site chrome, not article content.
 _BOILERPLATE = [
     "skip to main content",
+    "skip to main navigation",
+    "turn on more accessible mode",
+    "turn off more accessible mode",
     "subscribe to our newsletter",
     "subscribe",
     "google™ translate disclaimer",
@@ -70,6 +77,7 @@ _BOILERPLATE = [
 # pertinence guess. Case-insensitive; we cut at the earliest marker found.
 _TRUNCATE_MARKERS = [
     "Related Content",
+    "Relative Content",
     "Related Press Releases",
     "Related News",
     "More News",
@@ -110,6 +118,13 @@ def clean_html_to_text(html):
     # Tier 1: remove non-article structural elements entirely.
     for tag in soup(_DROP_TAGS):
         tag.decompose()
+
+    # Forms: drop only SMALL forms (search boxes, signups). Some CMS platforms
+    # (SharePoint) wrap the whole page in one big <form>; removing that would
+    # delete the article. Heuristic: keep any form longer than 500 chars of text.
+    for form in soup.find_all("form"):
+        if len(form.get_text(" ").split()) < 80:   # ~ small utility form
+            form.decompose()
 
     # Prefer <main> or <article> if present (the real body); else whole doc.
     container = soup.find("main") or soup.find("article") or soup

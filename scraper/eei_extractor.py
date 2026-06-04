@@ -45,7 +45,7 @@ _PHONE = re.compile(
 
 # Dollar amount: $4,000,000 | $1.5 million | $250 | $12.5 billion
 _AMOUNT = re.compile(
-    r"\$\s?\d{1,3}(?:,\d{3})*(?:\.\d+)?(?:\s?(?:million|billion|thousand|m|bn|k))?",
+    r"\$\s?\d{1,3}(?:,\d{3})*(?:\.\d+)?(?:\s?(?:million|billion|thousand|m|bn|k)\b)?",
     re.IGNORECASE,
 )
 
