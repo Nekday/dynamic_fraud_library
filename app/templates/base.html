@@ -106,6 +106,7 @@
       <a href="{{ url_for('signals') }}" class="{{ 'active' if request.endpoint=='signals' }}">Signals</a>
       <a href="{{ url_for('selectors') }}" class="{{ 'active' if request.endpoint=='selectors' }}">Selectors</a>
       <a href="{{ url_for('systems') }}" class="{{ 'active' if request.endpoint=='systems' }}">Systems</a>
+      <a href="{{ url_for('workbench') }}" class="{{ 'active' if request.endpoint in ['workbench','workbench_case'] }}">Workbench</a>
       <a href="{{ url_for('review') }}" class="{{ 'active' if request.endpoint=='review' }}">Review{% if pending %}<span class="badge">{{ pending }}</span>{% endif %}</a>
     </nav>
   </header>

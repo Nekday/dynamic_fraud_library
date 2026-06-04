@@ -282,3 +282,45 @@ def staging_counts():
         GROUP BY review_lane, status;
     """)
     return rows
+
+
+# ----------------------------------------------------------------------
+#  EEI Workbench (Layer 2 — read-only display)
+# ----------------------------------------------------------------------
+
+def list_cases():
+    """Observations that have captured text — the workbench case list."""
+    return query("""
+        SELECT o.observation_id, o.title, o.agency, o.jurisdiction_level,
+               o.docket_number, o.case_name,
+               length(o.captured_text) AS text_len,
+               (SELECT count(*) FROM eei_candidate e
+                 WHERE e.observation_id = o.observation_id) AS eei_count,
+               (SELECT count(*) FROM eei_candidate e
+                 WHERE e.observation_id = o.observation_id AND e.status='pending') AS pending_count
+        FROM observation o
+        WHERE o.captured_text IS NOT NULL
+        ORDER BY o.observation_id;
+    """)
+
+
+def get_case(observation_id):
+    """One observation with its full captured text and case identity."""
+    return query("""
+        SELECT observation_id, title, agency, jurisdiction, jurisdiction_level,
+               docket_number, case_name, court, disambiguation_note,
+               source_url, captured_text, captured_at
+        FROM observation
+        WHERE observation_id = %s;
+    """, (observation_id,), one=True)
+
+
+def get_eei_candidates(observation_id):
+    """EEI candidates for a case, ordered by position in the text."""
+    return query("""
+        SELECT eei_id, classifier_type, eei_class, matched_value, highlight_text,
+               start_offset, end_offset, origin, status, note, confidence
+        FROM eei_candidate
+        WHERE observation_id = %s
+        ORDER BY start_offset NULLS LAST, eei_id;
+    """, (observation_id,))

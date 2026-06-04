@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ case.title }} · Workbench{% endblock %}
+{% block content %}
+  <style>
+    .wb-grid{display:grid; grid-template-columns:1fr 360px; gap:1.2rem; align-items:start}
+    @media (max-width:900px){.wb-grid{grid-template-columns:1fr}}
+    .wb-text{
+      background:var(--panel); border:1px solid var(--line); border-radius:12px;
+      padding:1.1rem 1.3rem; line-height:1.85; max-height:70vh; overflow:auto;
+      font-size:.95rem; white-space:pre-wrap;
+    }
+    .wb-side{position:sticky; top:5rem}
+    mark.eei{
+      border-radius:4px; padding:.02rem .15rem; cursor:pointer;
+      color:#11161d; font-weight:500; scroll-margin-top:6rem;
+    }
+    mark.email{background:#7fb4c9}
+    mark.phone{background:#9ecf8f}
+    mark.url{background:#c9a87f}
+    mark.amount{background:#d8a657}
+    mark.behavioral{background:#c98fc0}
+    mark.ttp{background:#b0b0e0}
+    mark.eei.rejected{opacity:.35; text-decoration:line-through}
+    mark.eei.pulse{outline:3px solid #fff; transition:outline .1s}
+    .eei-row{cursor:pointer}
+    .eei-row:hover{background:rgba(216,166,87,.08)}
+    .swatch{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:.4rem; vertical-align:middle}
+    .legend{display:flex; gap:.8rem; flex-wrap:wrap; margin:.4rem 0 1rem; font-size:.8rem; color:var(--muted)}
+  </style>
+
+  <p class="sub"><a href="{{ url_for('workbench') }}">← All cases</a></p>
+  <h1>{{ case.title }}</h1>
+  <div class="meta">
+    {% if case.agency %}<span class="pill cat">{{ case.agency }}</span>{% endif %}
+    {% if case.jurisdiction_level %}<span class="pill">{{ case.jurisdiction_level }}</span>{% endif %}
+    {% if case.docket_number %}<span class="pill">{{ case.docket_number }}</span>{% endif %}
+    {% if case.source_url %}<a class="pill" href="{{ case.source_url }}" target="_blank" rel="noopener">source ↗</a>{% endif %}
+  </div>
+  {% if case.case_name %}<p class="sub"><strong>{{ case.case_name }}</strong>{% if case.court %} · {{ case.court }}{% endif %}</p>{% endif %}
+
+  <div class="legend">
+    <span><span class="swatch" style="background:#d8a657"></span>amount</span>
+    <span><span class="swatch" style="background:#7fb4c9"></span>email</span>
+    <span><span class="swatch" style="background:#9ecf8f"></span>phone</span>
+    <span><span class="swatch" style="background:#c9a87f"></span>url</span>
+    <span><span class="swatch" style="background:#c98fc0"></span>behavioral</span>
+  </div>
+
+  <div class="wb-grid">
+    <div class="wb-text" id="wb-text">{% for seg in segments %}{% if seg.kind == 'eei' %}<mark class="eei {{ seg.classifier_type }} {{ seg.status }}" id="eei-{{ seg.eei_id }}" data-eei="{{ seg.eei_id }}">{{ seg.text }}</mark>{% else %}{{ seg.text }}{% endif %}{% endfor %}</div>
+
+    <div class="wb-side">
+      <h2 style="margin-top:0">EEIs <span class="stix">{{ eeis|length }}</span></h2>
+      {% if eeis %}
+        <table>
+          <thead><tr><th>Type</th><th>Value</th></tr></thead>
+          <tbody>
+            {% for e in eeis %}
+              <tr class="eei-row" data-eei="{{ e.eei_id }}">
+                <td><span class="tag-class c-{{ e.eei_class }}">{{ e.classifier_type }}</span></td>
+                <td class="mono">{{ e.matched_value or e.highlight_text }}
+                    {% if e.status != 'pending' %}<span class="sub">({{ e.status }})</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p class="sub" style="margin-top:.6rem">Click a row to jump to its highlight. (Approve/reject &amp; manual tagging come in the next build.)</p>
+      {% else %}
+        <p class="empty">No EEIs extracted for this case.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <script>
+    // Cross-link: click a table row -> scroll to its highlight and pulse it.
+    (function(){
+      function pulse(mark){
+        if(!mark) return;
+        mark.scrollIntoView({behavior:'smooth', block:'center'});
+        mark.classList.add('pulse');
+        setTimeout(function(){ mark.classList.remove('pulse'); }, 900);
+      }
+      document.querySelectorAll('.eei-row').forEach(function(row){
+        row.addEventListener('click', function(){
+          pulse(document.getElementById('eei-' + row.getAttribute('data-eei')));
+        });
+      });
+      // And click a highlight -> flash its table row.
+      document.querySelectorAll('mark.eei').forEach(function(m){
+        m.addEventListener('click', function(){
+          var row = document.querySelector('.eei-row[data-eei="' + m.getAttribute('data-eei') + '"]');
+          if(row){ row.scrollIntoView({behavior:'smooth', block:'center'});
+                   row.style.background='rgba(216,166,87,.25)';
+                   setTimeout(function(){ row.style.background=''; }, 900); }
+        });
+      });
+    })();
+  </script>
+{% endblock %}

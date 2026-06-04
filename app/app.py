@@ -87,6 +87,62 @@ def systems():
     return render_template("systems.html", systems=db.external_systems())
 
 
+# ---- EEI Workbench (Layer 2: read-only display) ----
+
+@app.route("/workbench")
+def workbench():
+    return render_template("workbench_list.html", cases=db.list_cases())
+
+
+@app.route("/workbench/<int:observation_id>")
+def workbench_case(observation_id):
+    case = db.get_case(observation_id)
+    if not case:
+        flash("Case not found.", "error")
+        return redirect(url_for("workbench"))
+    eeis = db.get_eei_candidates(observation_id)
+    segments = _segment_text(case["captured_text"], eeis)
+    return render_template("workbench_case.html", case=case, eeis=eeis, segments=segments)
+
+
+def _segment_text(text, eeis):
+    """
+    Split captured text into an ordered list of segments for safe rendering.
+    Each segment is either plain text or a highlighted EEI span. Doing this in
+    Python (not Jinja) keeps offset handling reliable. Overlapping/duplicate
+    offsets are skipped defensively so the text is never corrupted.
+    """
+    if not text:
+        return []
+    # collect valid, non-overlapping spans sorted by start
+    spans = []
+    last_end = 0
+    valid = sorted(
+        [e for e in eeis if e["start_offset"] is not None and e["end_offset"] is not None
+         and 0 <= e["start_offset"] < e["end_offset"] <= len(text)],
+        key=lambda e: e["start_offset"],
+    )
+    segments = []
+    cursor = 0
+    for e in valid:
+        s, en = e["start_offset"], e["end_offset"]
+        if s < cursor:
+            continue  # overlaps a prior span; skip defensively
+        if s > cursor:
+            segments.append({"kind": "text", "text": text[cursor:s]})
+        segments.append({
+            "kind": "eei",
+            "text": text[s:en],
+            "eei_id": e["eei_id"],
+            "classifier_type": e["classifier_type"],
+            "status": e["status"],
+        })
+        cursor = en
+    if cursor < len(text):
+        segments.append({"kind": "text", "text": text[cursor:]})
+    return segments
+
+
 # ---- Two-lane staging review ----
 
 @app.route("/review")

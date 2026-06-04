@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Workbench · Fraud Taxonomy{% endblock %}
+{% block content %}
+  <h1>EEI Workbench</h1>
+  <p class="sub">Captured cases with extracted Essential Elements of Information. Open a case to review its EEIs highlighted in the source text.</p>
+
+  {% if cases %}
+    <table>
+      <thead><tr><th>#</th><th>Case</th><th>Agency</th><th>Level</th><th>Case ID</th><th>Text</th><th>EEIs</th></tr></thead>
+      <tbody>
+        {% for c in cases %}
+          <tr>
+            <td class="mono">{{ c.observation_id }}</td>
+            <td><a href="{{ url_for('workbench_case', observation_id=c.observation_id) }}">{{ c.title }}</a>
+                {% if c.case_name %}<div class="sub">{{ c.case_name }}</div>{% endif %}</td>
+            <td>{{ c.agency or '—' }}</td>
+            <td>{% if c.jurisdiction_level %}<span class="pill">{{ c.jurisdiction_level }}</span>{% endif %}</td>
+            <td class="mono">{{ c.docket_number or '—' }}</td>
+            <td class="sub">{{ c.text_len }} ch</td>
+            <td><span class="pill">{{ c.eei_count }}{% if c.pending_count %} · {{ c.pending_count }} pending{% endif %}</span></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty">No captured cases yet. Use <code>text_capture.py --store</code> to add one.</p>
+  {% endif %}
+{% endblock %}
