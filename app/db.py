@@ -484,3 +484,71 @@ def apply_eei_decisions(observation_id, decisions):
                     summary["reset"] += 1
         conn.commit()
     return summary
+
+
+# ----------------------------------------------------------------------
+#  EEI Workbench — 3b: human highlight-and-assign (semantic EEIs)
+# ----------------------------------------------------------------------
+
+# Map a chosen semantic type to the eei_class it belongs to (determines how it
+# promotes later). 'selector' covers human-spotted IOCs the regex missed.
+_SEMANTIC_CLASS = {
+    "behavioral":      "behavioral",
+    "victim_profile":  "behavioral",   # profiles ride the behavioral class for now
+    "fraudster_profile": "behavioral",
+    "ttp":             "ttp",
+    "selector":        "selector",
+}
+
+
+def add_human_eeis(observation_id, highlight_text, start_offset, end_offset, types,
+                   status="approved", note=None):
+    """
+    Create one human-origin eei_candidate per chosen type for a single
+    highlighted span (3b). One span can carry multiple tags (e.g. behavioral +
+    ttp), so `types` is a list; each becomes its own atomic EEI row sharing the
+    same text and offsets.
+
+    Validates offsets against the observation's captured_text so a stale or
+    malformed selection can't store a misaligned highlight. Returns the list of
+    new eei_ids (or raises ValueError on bad offsets).
+    """
+    case = query("SELECT captured_text FROM observation WHERE observation_id=%s;",
+                 (observation_id,), one=True)
+    if not case or case["captured_text"] is None:
+        raise ValueError("Observation has no captured text.")
+    text = case["captured_text"]
+
+    # Offset sanity: must be in range and must slice back to the submitted text.
+    if not (isinstance(start_offset, int) and isinstance(end_offset, int)
+            and 0 <= start_offset < end_offset <= len(text)):
+        raise ValueError(f"Offsets out of range (0..{len(text)}).")
+    if text[start_offset:end_offset] != highlight_text:
+        raise ValueError("Offsets do not match the submitted highlight text "
+                         "(text may have changed).")
+
+    valid_types = [t for t in types if t in _SEMANTIC_CLASS]
+    if not valid_types:
+        raise ValueError("No valid types supplied.")
+
+    new_ids = []
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            for t in valid_types:
+                eei_class = _SEMANTIC_CLASS[t]
+                cur.execute(
+                    """
+                    INSERT INTO eei_candidate
+                        (observation_id, classifier_type, eei_class, matched_value,
+                         highlight_text, start_offset, end_offset, origin, status,
+                         note, reviewed_at)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,'human',%s,%s,
+                            CASE WHEN %s='approved' THEN now() ELSE NULL END)
+                    RETURNING eei_id;
+                    """,
+                    (observation_id, t, eei_class, highlight_text, highlight_text,
+                     start_offset, end_offset, status, note, status),
+                )
+                new_ids.append(cur.fetchone()["eei_id"])
+        conn.commit()
+    return new_ids

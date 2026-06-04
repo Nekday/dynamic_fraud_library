@@ -20,6 +20,19 @@
     mark.amount{background:#d8a657}
     mark.behavioral{background:#c98fc0}
     mark.ttp{background:#b0b0e0}
+    mark.victim_profile{background:#e0a0a0}
+    mark.fraudster_profile{background:#cf9d6b}
+    mark.selector{background:#9ecf8f}
+    .tag-picker{
+      position:fixed; z-index:50; background:var(--panel); border:1px solid var(--accent);
+      border-radius:10px; padding:.7rem .8rem; box-shadow:0 8px 30px rgba(0,0,0,.5);
+      max-width:280px; font-size:.85rem;
+    }
+    .tag-picker-head{font-weight:600; margin-bottom:.3rem}
+    .tag-picker-sel{font-size:.75rem; color:var(--muted); margin-bottom:.5rem;
+                    max-height:3.2em; overflow:auto; border-left:2px solid var(--line); padding-left:.4rem}
+    .tag-picker label{display:block; margin:.15rem 0; cursor:pointer}
+    .tag-picker-actions{margin-top:.5rem; display:flex; gap:.4rem}
     mark.eei.rejected{opacity:.35; text-decoration:line-through}
     mark.eei.pulse{outline:3px solid #fff; transition:outline .1s}
     .eei-row{cursor:pointer}
@@ -66,6 +79,21 @@
 
   <div class="wb-grid">
     <div class="wb-text" id="wb-text">{% for seg in segments %}{% if seg.kind == 'eei' %}<mark class="eei {{ seg.classifier_type }} {{ seg.status }}" id="eei-{{ seg.eei_id }}" data-eei="{{ seg.eei_id }}">{{ seg.text }}</mark>{% else %}{{ seg.text }}{% endif %}{% endfor %}</div>
+
+    <!-- 3b: highlight-and-assign type picker (hidden until a selection is made) -->
+    <div id="tag-picker" class="tag-picker" style="display:none">
+      <div class="tag-picker-head">Tag selection as:</div>
+      <div class="tag-picker-sel mono" id="tag-picker-sel"></div>
+      <label><input type="checkbox" value="behavioral"> behavioral signal</label>
+      <label><input type="checkbox" value="victim_profile"> victim profile</label>
+      <label><input type="checkbox" value="fraudster_profile"> fraudster profile</label>
+      <label><input type="checkbox" value="ttp"> TTP</label>
+      <label><input type="checkbox" value="selector"> selector (IOC)</label>
+      <div class="tag-picker-actions">
+        <button type="button" class="btn-sm" id="tag-add">Add tag(s)</button>
+        <button type="button" class="btn-sm" id="tag-cancel">Cancel</button>
+      </div>
+    </div>
 
     <div class="wb-side">
       <h2 style="margin-top:0">EEIs <span class="stix">{{ eeis|length }}</span></h2>
@@ -144,6 +172,44 @@
         if(stageCount) stageCount.textContent = n ? (n + ' staged') : '';
       }
 
+      // Persist staged decisions across an Add-tag reload (so an unsaved ✓/✕ is
+      // not lost when a new highlight is added). Keyed per observation.
+      var STAGE_KEY = 'ft_staged_{{ case.observation_id }}';
+
+      function saveStaged(){
+        var map = {};
+        document.querySelectorAll('.decision-cell input[data-hidden]').forEach(function(h){
+          if(h.value){ map[h.getAttribute('data-hidden')] = h.value; }
+        });
+        try { sessionStorage.setItem(STAGE_KEY, JSON.stringify(map)); } catch(e){}
+      }
+
+      function applyStagedToRow(row, value){
+        var hidden = row.querySelector('input[data-hidden]');
+        var aBtn = row.querySelector('.tog.approve');
+        var rBtn = row.querySelector('.tog.reject');
+        hidden.value = value;
+        aBtn.classList.toggle('on', value === 'approved');
+        rBtn.classList.toggle('on', value === 'rejected');
+        row.classList.toggle('row-staged-approved', value === 'approved');
+        row.classList.toggle('row-staged-rejected', value === 'rejected');
+      }
+
+      function restoreStaged(){
+        var raw = null;
+        try { raw = sessionStorage.getItem(STAGE_KEY); } catch(e){}
+        if(!raw) return;
+        var map = {};
+        try { map = JSON.parse(raw); } catch(e){ return; }
+        Object.keys(map).forEach(function(eeiId){
+          var row = document.querySelector('.eei-row[data-eei="' + eeiId + '"]');
+          if(row){ applyStagedToRow(row, map[eeiId]); }
+        });
+        // staging restored; clear the stash so a normal navigation away starts fresh
+        try { sessionStorage.removeItem(STAGE_KEY); } catch(e){}
+        refreshCount();
+      }
+
       function setDecision(row, decision){
         var hidden = row.querySelector('input[data-hidden]');
         var aBtn = row.querySelector('.tog.approve');
@@ -191,7 +257,82 @@
         });
       });
 
-      refreshCount();
+      // ---- 3b: highlight-and-assign ----
+      var wbText = document.getElementById('wb-text');
+      var picker = document.getElementById('tag-picker');
+      var pickerSel = document.getElementById('tag-picker-sel');
+      var pending = null; // {text, start, end}
+
+      // Compute absolute character offset within #wb-text for a (node, offset)
+      // point, by summing the lengths of all text nodes before it. Because the
+      // rendered text (plain + mark contents) concatenates exactly to the stored
+      // canonical string, this yields the canonical offset.
+      function absOffset(container, node, offsetInNode){
+        var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+        var total = 0, n;
+        while((n = walker.nextNode())){
+          if(n === node){ return total + offsetInNode; }
+          total += n.nodeValue.length;
+        }
+        return null; // node not found under container
+      }
+
+      function clearChecks(){
+        picker.querySelectorAll('input[type=checkbox]').forEach(function(c){ c.checked=false; });
+      }
+      function hidePicker(){ picker.style.display='none'; pending=null; }
+
+      wbText.addEventListener('mouseup', function(e){
+        var sel = window.getSelection();
+        if(!sel || sel.isCollapsed || sel.rangeCount === 0){ return; }
+        var range = sel.getRangeAt(0);
+        // selection must be entirely within the text container
+        if(!wbText.contains(range.startContainer) || !wbText.contains(range.endContainer)){ return; }
+        var text = sel.toString();
+        if(!text.trim()){ return; }
+        var start = absOffset(wbText, range.startContainer, range.startOffset);
+        var end = absOffset(wbText, range.endContainer, range.endOffset);
+        if(start === null || end === null || end <= start){ return; }
+        pending = {text:text, start:start, end:end};
+        pickerSel.textContent = '“' + (text.length>120 ? text.slice(0,120)+'…' : text) + '”';
+        clearChecks();
+        // position the picker near the cursor
+        picker.style.display='block';
+        var px = Math.min(e.clientX, window.innerWidth - 300);
+        var py = Math.min(e.clientY + 8, window.innerHeight - 240);
+        picker.style.left = px + 'px';
+        picker.style.top = py + 'px';
+      });
+
+      document.getElementById('tag-cancel').addEventListener('click', function(){
+        hidePicker(); window.getSelection().removeAllRanges();
+      });
+
+      document.getElementById('tag-add').addEventListener('click', function(){
+        if(!pending){ hidePicker(); return; }
+        var types = [];
+        picker.querySelectorAll('input[type=checkbox]:checked').forEach(function(c){ types.push(c.value); });
+        if(types.length === 0){ alert('Pick at least one type.'); return; }
+        var body = new URLSearchParams();
+        body.append('highlight_text', pending.text);
+        body.append('start_offset', pending.start);
+        body.append('end_offset', pending.end);
+        body.append('types', types.join(','));
+        fetch('{{ url_for("workbench_tag", observation_id=case.observation_id) }}', {
+          method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:body.toString()
+        }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+          .then(function(res){
+            if(res.ok && res.j.ok){
+              hidePicker(); window.getSelection().removeAllRanges();
+              saveStaged();  // preserve any staged ✓/✕ across the reload
+              window.location.reload();
+            } else {
+              alert('Could not add tag: ' + (res.j.error || 'unknown error'));
+            }
+          }).catch(function(){ alert('Network error adding tag.'); });
+      });
+
+      restoreStaged();  // re-apply any staged decisions preserved across an Add-tag reload
     })();
   </script>
 {% endblock %}

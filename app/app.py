@@ -105,6 +105,29 @@ def workbench_case(observation_id):
     return render_template("workbench_case.html", case=case, eeis=eeis, segments=segments)
 
 
+@app.route("/workbench/<int:observation_id>/tag", methods=["POST"])
+def workbench_tag(observation_id):
+    """
+    Receive a human highlight-and-assign (3b). Expects:
+      highlight_text, start_offset, end_offset, types (comma-separated).
+    Creates one approved human-origin EEI per chosen type. Returns JSON so the
+    page can update without a full reload.
+    """
+    from flask import jsonify
+    text = request.form.get("highlight_text", "")
+    types = [t for t in (request.form.get("types", "").split(",")) if t]
+    try:
+        start = int(request.form.get("start_offset", ""))
+        end = int(request.form.get("end_offset", ""))
+    except ValueError:
+        return jsonify({"ok": False, "error": "Bad offsets."}), 400
+    try:
+        new_ids = db.add_human_eeis(observation_id, text, start, end, types)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    return jsonify({"ok": True, "new_ids": new_ids, "count": len(new_ids)})
+
+
 @app.route("/workbench/<int:observation_id>/submit", methods=["POST"])
 def workbench_submit(observation_id):
     """
