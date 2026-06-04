@@ -24,6 +24,24 @@
     mark.eei.pulse{outline:3px solid #fff; transition:outline .1s}
     .eei-row{cursor:pointer}
     .eei-row:hover{background:rgba(216,166,87,.08)}
+    .tog{font-size:.85rem; padding:.05rem .45rem; border-radius:4px; border:1px solid var(--line);
+         background:var(--panel); color:var(--muted); cursor:pointer; margin-right:.15rem}
+    .tog.approve.on{background:#2e7d32; border-color:#2e7d32; color:#fff}
+    .tog.reject.on{background:#a33; border-color:#a33; color:#fff}
+    .cur-status{font-size:.72rem; margin-left:.35rem; color:var(--muted)}
+    .cur-status.status-approved{color:#9ecf8f}
+    .cur-status.status-rejected{color:#c98f8f}
+    .row-staged-approved{background:rgba(46,125,50,.12)}
+    .row-staged-rejected{background:rgba(170,51,51,.12)}
+    .stage-bar{display:flex; gap:.3rem; flex-wrap:wrap}
+    .btn-sm{font-size:.78rem; padding:.22rem .55rem; border-radius:6px; border:1px solid var(--line);
+            background:var(--panel); color:var(--fg); cursor:pointer}
+    .btn-sm:hover{border-color:var(--accent)}
+    .submit-bar{margin-top:.7rem; display:flex; align-items:center; gap:.6rem}
+    .btn-submit{font-size:.9rem; padding:.4rem .9rem; border-radius:7px; border:1px solid var(--accent);
+                background:var(--accent); color:#11161d; font-weight:600; cursor:pointer}
+    .btn-submit:disabled{opacity:.4; cursor:not-allowed}
+    td.nowrap{white-space:nowrap}
     .swatch{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:.4rem; vertical-align:middle}
     .legend{display:flex; gap:.8rem; flex-wrap:wrap; margin:.4rem 0 1rem; font-size:.8rem; color:var(--muted)}
   </style>
@@ -52,19 +70,35 @@
     <div class="wb-side">
       <h2 style="margin-top:0">EEIs <span class="stix">{{ eeis|length }}</span></h2>
       {% if eeis %}
-        <table>
-          <thead><tr><th>Type</th><th>Value</th></tr></thead>
-          <tbody>
-            {% for e in eeis %}
-              <tr class="eei-row" data-eei="{{ e.eei_id }}">
-                <td><span class="tag-class c-{{ e.eei_class }}">{{ e.classifier_type }}</span></td>
-                <td class="mono">{{ e.matched_value or e.highlight_text }}
-                    {% if e.status != 'pending' %}<span class="sub">({{ e.status }})</span>{% endif %}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        <p class="sub" style="margin-top:.6rem">Click a row to jump to its highlight. (Approve/reject &amp; manual tagging come in the next build.)</p>
+        <form method="post" action="{{ url_for('workbench_submit', observation_id=case.observation_id) }}" id="decision-form">
+          <div class="stage-bar">
+            <button type="button" class="btn-sm" data-all="approved">Stage all ✓</button>
+            <button type="button" class="btn-sm" data-all="rejected">Stage all ✕</button>
+            <button type="button" class="btn-sm" data-all="reset">Clear staged</button>
+          </div>
+          <table style="margin-top:.5rem">
+            <thead><tr><th>Type</th><th>Value</th><th>Decision</th></tr></thead>
+            <tbody>
+              {% for e in eeis %}
+                <tr class="eei-row" data-eei="{{ e.eei_id }}" data-current="{{ e.status }}">
+                  <td><span class="tag-class c-{{ e.eei_class }}">{{ e.classifier_type }}</span></td>
+                  <td class="mono">{{ e.matched_value or e.highlight_text }}</td>
+                  <td class="nowrap decision-cell">
+                    <input type="hidden" name="decision_{{ e.eei_id }}" value="" data-hidden="{{ e.eei_id }}">
+                    <button type="button" class="tog approve" data-set="approved" title="Approve">✓</button>
+                    <button type="button" class="tog reject"  data-set="rejected" title="Reject">✕</button>
+                    <span class="cur-status status-{{ e.status }}">{{ e.status }}</span>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="submit-bar">
+            <button type="submit" class="btn-submit" id="submit-btn" disabled>Submit decisions</button>
+            <span class="sub" id="stage-count"></span>
+          </div>
+        </form>
+        <p class="sub" style="margin-top:.6rem">Click ✓ or ✕ to stage a decision; click again to un-stage (toggle). Nothing is saved until you press <em>Submit</em>. Approved selectors (email/phone/url) promote to the Selectors library; amounts are recorded as case facts.</p>
       {% else %}
         <p class="empty">No EEIs extracted for this case.</p>
       {% endif %}
@@ -72,20 +106,23 @@
   </div>
 
   <script>
-    // Cross-link: click a table row -> scroll to its highlight and pulse it.
     (function(){
+      // ---- Highlight pulse helper ----
       function pulse(mark){
         if(!mark) return;
         mark.scrollIntoView({behavior:'smooth', block:'center'});
         mark.classList.add('pulse');
         setTimeout(function(){ mark.classList.remove('pulse'); }, 900);
       }
-      document.querySelectorAll('.eei-row').forEach(function(row){
-        row.addEventListener('click', function(){
+      // Click the VALUE cell (.mono) -> jump to highlight. (Not the buttons.)
+      document.querySelectorAll('.eei-row .mono').forEach(function(cell){
+        cell.style.cursor='pointer';
+        cell.addEventListener('click', function(){
+          var row = cell.closest('.eei-row');
           pulse(document.getElementById('eei-' + row.getAttribute('data-eei')));
         });
       });
-      // And click a highlight -> flash its table row.
+      // Click a highlight -> flash its row.
       document.querySelectorAll('mark.eei').forEach(function(m){
         m.addEventListener('click', function(){
           var row = document.querySelector('.eei-row[data-eei="' + m.getAttribute('data-eei') + '"]');
@@ -94,6 +131,67 @@
                    setTimeout(function(){ row.style.background=''; }, 900); }
         });
       });
+
+      // ---- R1: staged, toggleable decisions ----
+      var submitBtn = document.getElementById('submit-btn');
+      var stageCount = document.getElementById('stage-count');
+
+      function refreshCount(){
+        var staged = document.querySelectorAll('.decision-cell input[data-hidden]');
+        var n = 0;
+        staged.forEach(function(h){ if(h.value) n++; });
+        if(submitBtn) submitBtn.disabled = (n === 0);
+        if(stageCount) stageCount.textContent = n ? (n + ' staged') : '';
+      }
+
+      function setDecision(row, decision){
+        var hidden = row.querySelector('input[data-hidden]');
+        var aBtn = row.querySelector('.tog.approve');
+        var rBtn = row.querySelector('.tog.reject');
+        // toggle off if clicking the same decision again
+        var current = hidden.value;
+        var target = (current === decision) ? '' : decision;
+        hidden.value = target;
+        aBtn.classList.toggle('on', target === 'approved');
+        rBtn.classList.toggle('on', target === 'rejected');
+        row.classList.toggle('row-staged-approved', target === 'approved');
+        row.classList.toggle('row-staged-rejected', target === 'rejected');
+        refreshCount();
+      }
+
+      document.querySelectorAll('.eei-row').forEach(function(row){
+        var aBtn = row.querySelector('.tog.approve');
+        var rBtn = row.querySelector('.tog.reject');
+        if(aBtn) aBtn.addEventListener('click', function(){ setDecision(row,'approved'); });
+        if(rBtn) rBtn.addEventListener('click', function(){ setDecision(row,'rejected'); });
+      });
+
+      // Stage-all helpers. "reset" stages a return-to-pending for any row whose
+      // current status isn't already pending (so you can un-approve in bulk),
+      // and clears staging for pending rows.
+      document.querySelectorAll('[data-all]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var mode = btn.getAttribute('data-all');
+          document.querySelectorAll('.eei-row').forEach(function(row){
+            var hidden = row.querySelector('input[data-hidden]');
+            var aBtn = row.querySelector('.tog.approve');
+            var rBtn = row.querySelector('.tog.reject');
+            var curStatus = row.getAttribute('data-current');
+            if(mode === 'approved' || mode === 'rejected'){
+              hidden.value = mode;
+            } else { // reset/clear
+              hidden.value = (curStatus !== 'pending') ? 'pending' : '';
+            }
+            aBtn.classList.toggle('on', hidden.value === 'approved');
+            rBtn.classList.toggle('on', hidden.value === 'rejected');
+            row.classList.toggle('row-staged-approved', hidden.value === 'approved');
+            row.classList.toggle('row-staged-rejected', hidden.value === 'rejected');
+          });
+          refreshCount();
+        });
+      });
+
+      refreshCount();
     })();
   </script>
 {% endblock %}

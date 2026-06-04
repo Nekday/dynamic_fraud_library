@@ -324,3 +324,163 @@ def get_eei_candidates(observation_id):
         WHERE observation_id = %s
         ORDER BY start_offset NULLS LAST, eei_id;
     """, (observation_id,))
+
+
+# ----------------------------------------------------------------------
+#  EEI Workbench — 3a: approve / reject / promote
+# ----------------------------------------------------------------------
+
+# Which EEI classifier types are true pivotable selectors (IOCs) that promote
+# into selector_value. 'amount' is a case fact, not a selector, so it is
+# recorded as approved but not promoted. 'behavioral'/'ttp' are handled later.
+_SELECTOR_TYPES = {"email", "phone", "url", "domain", "ip"}
+
+
+def get_eei(eei_id):
+    return query("SELECT * FROM eei_candidate WHERE eei_id = %s;", (eei_id,), one=True)
+
+
+def reject_eei(eei_id):
+    """Mark a single EEI candidate rejected."""
+    execute("""
+        UPDATE eei_candidate
+        SET status='rejected', reviewed_at=now()
+        WHERE eei_id = %s;
+    """, (eei_id,))
+
+
+def approve_eei(eei_id):
+    """
+    Approve a single EEI candidate.
+      * Selector types (email/phone/url/domain/ip) -> upsert into selector_value,
+        link the candidate to the created/existing selector row.
+      * Other types (amount, behavioral, ttp) -> just mark approved (recorded as
+        a confirmed case fact; not promoted to selector_value).
+    Done in one transaction so the candidate and any selector row stay consistent.
+    """
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM eei_candidate WHERE eei_id=%s FOR UPDATE;", (eei_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            ctype = row["classifier_type"]
+            value = row["matched_value"] or row["highlight_text"]
+
+            selector_id = None
+            if ctype in _SELECTOR_TYPES and value:
+                # Upsert: reuse an existing selector with same (type,value), else create.
+                cur.execute(
+                    "SELECT selector_id FROM selector_value WHERE selector_type=%s AND value=%s;",
+                    (ctype, value),
+                )
+                hit = cur.fetchone()
+                if hit:
+                    selector_id = hit["selector_id"]
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO selector_value (selector_type, value, context, created_at)
+                        VALUES (%s, %s, %s, now())
+                        RETURNING selector_id;
+                        """,
+                        (ctype, value, f"from observation #{row['observation_id']}"),
+                    )
+                    selector_id = cur.fetchone()["selector_id"]
+
+            cur.execute(
+                """
+                UPDATE eei_candidate
+                SET status='approved', reviewed_at=now(), promoted_selector_id=%s
+                WHERE eei_id=%s;
+                """,
+                (selector_id, eei_id),
+            )
+        conn.commit()
+    return selector_id
+
+
+def bulk_eei_action(observation_id, action, only_type=None):
+    """
+    Approve or reject all PENDING candidates for a case (optionally filtered to
+    one classifier_type). Returns the count affected. Approvals route through
+    approve_eei so selector promotion still happens per row.
+    """
+    pend = query("""
+        SELECT eei_id, classifier_type FROM eei_candidate
+        WHERE observation_id=%s AND status='pending'
+        {} ;
+    """.format("AND classifier_type=%s" if only_type else ""),
+        (observation_id, only_type) if only_type else (observation_id,))
+    n = 0
+    for r in pend:
+        if action == "approve":
+            approve_eei(r["eei_id"])
+        elif action == "reject":
+            reject_eei(r["eei_id"])
+        n += 1
+    return n
+
+
+def apply_eei_decisions(observation_id, decisions):
+    """
+    Apply a batch of staged review decisions in ONE transaction (R1).
+
+    `decisions` is a dict {eei_id: 'approved'|'rejected'|'pending'}. This lets
+    the reviewer stage/toggle choices in the browser and commit them all at
+    once — and a single decision can be changed right up until submit, including
+    back to 'pending' (which un-does a prior approve/reject and clears any
+    promoted selector link).
+
+    Returns a summary dict of counts. Selector promotion for approved
+    selector-type EEIs happens here, deduped against selector_value.
+    """
+    summary = {"approved": 0, "rejected": 0, "reset": 0, "promoted": 0}
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            for eei_id, target in decisions.items():
+                cur.execute("SELECT * FROM eei_candidate WHERE eei_id=%s AND observation_id=%s FOR UPDATE;",
+                            (eei_id, observation_id))
+                row = cur.fetchone()
+                if not row:
+                    continue
+
+                if target == "approved":
+                    selector_id = row.get("promoted_selector_id")
+                    ctype = row["classifier_type"]
+                    value = row["matched_value"] or row["highlight_text"]
+                    if ctype in _SELECTOR_TYPES and value and not selector_id:
+                        cur.execute("SELECT selector_id FROM selector_value WHERE selector_type=%s AND value=%s;",
+                                    (ctype, value))
+                        hit = cur.fetchone()
+                        if hit:
+                            selector_id = hit["selector_id"]
+                        else:
+                            cur.execute(
+                                """INSERT INTO selector_value (selector_type, value, context, created_at)
+                                   VALUES (%s,%s,%s, now()) RETURNING selector_id;""",
+                                (ctype, value, f"from observation #{observation_id}"))
+                            selector_id = cur.fetchone()["selector_id"]
+                            summary["promoted"] += 1
+                    cur.execute("""UPDATE eei_candidate
+                                   SET status='approved', reviewed_at=now(), promoted_selector_id=%s
+                                   WHERE eei_id=%s;""", (selector_id, eei_id))
+                    summary["approved"] += 1
+
+                elif target == "rejected":
+                    cur.execute("""UPDATE eei_candidate
+                                   SET status='rejected', reviewed_at=now()
+                                   WHERE eei_id=%s;""", (eei_id,))
+                    summary["rejected"] += 1
+
+                elif target == "pending":
+                    # Un-do: reset to pending and clear any promotion link.
+                    # (The promoted selector row is left in place; it may be
+                    # shared by other cases. A future cleanup pass can prune
+                    # orphaned selectors if desired.)
+                    cur.execute("""UPDATE eei_candidate
+                                   SET status='pending', reviewed_at=NULL, promoted_selector_id=NULL
+                                   WHERE eei_id=%s;""", (eei_id,))
+                    summary["reset"] += 1
+        conn.commit()
+    return summary

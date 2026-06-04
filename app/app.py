@@ -105,6 +105,33 @@ def workbench_case(observation_id):
     return render_template("workbench_case.html", case=case, eeis=eeis, segments=segments)
 
 
+@app.route("/workbench/<int:observation_id>/submit", methods=["POST"])
+def workbench_submit(observation_id):
+    """
+    Receive staged review decisions as a batch (R1). The form sends, for each
+    EEI the reviewer touched, a field decision_<eei_id> = approved|rejected|pending.
+    Untouched EEIs are not submitted and keep their current status.
+    """
+    decisions = {}
+    for key, val in request.form.items():
+        if key.startswith("decision_") and val in ("approved", "rejected", "pending"):
+            try:
+                eei_id = int(key[len("decision_"):])
+            except ValueError:
+                continue
+            decisions[eei_id] = val
+    if not decisions:
+        flash("No decisions to submit.", "info")
+        return redirect(url_for("workbench_case", observation_id=observation_id))
+    s = db.apply_eei_decisions(observation_id, decisions)
+    flash(
+        f"Saved: {s['approved']} approved, {s['rejected']} rejected, "
+        f"{s['reset']} reset to pending. {s['promoted']} new selector(s) promoted.",
+        "success",
+    )
+    return redirect(url_for("workbench_case", observation_id=observation_id))
+
+
 def _segment_text(text, eeis):
     """
     Split captured text into an ordered list of segments for safe rendering.
