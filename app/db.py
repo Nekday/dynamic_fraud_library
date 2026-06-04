@@ -308,7 +308,7 @@ def get_case(observation_id):
     """One observation with its full captured text and case identity."""
     return query("""
         SELECT observation_id, title, agency, jurisdiction, jurisdiction_level,
-               docket_number, case_name, court, disambiguation_note,
+               docket_number, case_name, court, disambiguation_note, analyst_note,
                source_url, captured_text, captured_at
         FROM observation
         WHERE observation_id = %s;
@@ -498,6 +498,7 @@ _SEMANTIC_CLASS = {
     "fraudster_profile": "behavioral",
     "ttp":             "ttp",
     "selector":        "selector",
+    "note":            "note",          # parked clipping; never promoted to signals/selectors
 }
 
 
@@ -552,3 +553,28 @@ def add_human_eeis(observation_id, highlight_text, start_offset, end_offset, typ
                 new_ids.append(cur.fetchone()["eei_id"])
         conn.commit()
     return new_ids
+
+
+# ----------------------------------------------------------------------
+#  EEI Workbench — notes (case-level commentary + clippings)
+# ----------------------------------------------------------------------
+
+def get_note_clippings(observation_id):
+    """Note-type clippings for a case, in document order (for the Notes panel)."""
+    return query("""
+        SELECT eei_id, highlight_text, start_offset, end_offset
+        FROM eei_candidate
+        WHERE observation_id=%s AND classifier_type='note'
+        ORDER BY start_offset NULLS LAST, eei_id;
+    """, (observation_id,))
+
+
+def save_analyst_note(observation_id, text):
+    """Save the case-level free-text analyst commentary."""
+    execute("UPDATE observation SET analyst_note=%s WHERE observation_id=%s;",
+            (text, observation_id))
+
+
+def remove_eei(eei_id):
+    """Delete an EEI candidate (used to un-clip a note or remove a tag)."""
+    execute("DELETE FROM eei_candidate WHERE eei_id=%s;", (eei_id,))

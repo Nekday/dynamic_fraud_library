@@ -23,6 +23,20 @@
     mark.victim_profile{background:#e0a0a0}
     mark.fraudster_profile{background:#cf9d6b}
     mark.selector{background:#9ecf8f}
+    mark.note{background:#d6c77a}
+    .notes-panel{margin-top:1.4rem; background:var(--panel); border:1px solid var(--line);
+                 border-radius:12px; padding:1rem 1.2rem}
+    .clip-list{list-style:none; padding:0; margin:.4rem 0}
+    .clip-list li{margin:.35rem 0; padding:.35rem .5rem; border-left:3px solid #d6c77a;
+                  background:rgba(214,199,122,.08); border-radius:0 6px 6px 0;
+                  display:flex; justify-content:space-between; gap:.6rem; align-items:flex-start}
+    .clip-quote{font-style:italic}
+    .clip-remove{font-size:.75rem; color:var(--muted); cursor:pointer; background:none;
+                 border:1px solid var(--line); border-radius:4px; padding:.05rem .35rem}
+    .clip-remove:hover{color:#fff; background:#a33; border-color:#a33}
+    .note-box{width:100%; min-height:120px; background:var(--bg); color:var(--fg);
+              border:1px solid var(--line); border-radius:8px; padding:.6rem; font-family:inherit;
+              font-size:.92rem; line-height:1.5; resize:vertical}
     .tag-picker{
       position:fixed; z-index:50; background:var(--panel); border:1px solid var(--accent);
       border-radius:10px; padding:.7rem .8rem; box-shadow:0 8px 30px rgba(0,0,0,.5);
@@ -89,6 +103,7 @@
       <label><input type="checkbox" value="fraudster_profile"> fraudster profile</label>
       <label><input type="checkbox" value="ttp"> TTP</label>
       <label><input type="checkbox" value="selector"> selector (IOC)</label>
+      <label><input type="checkbox" value="note"> note (clip for case notes)</label>
       <div class="tag-picker-actions">
         <button type="button" class="btn-sm" id="tag-add">Add tag(s)</button>
         <button type="button" class="btn-sm" id="tag-cancel">Cancel</button>
@@ -131,6 +146,32 @@
         <p class="empty">No EEIs extracted for this case.</p>
       {% endif %}
     </div>
+  </div>
+
+  <!-- Case-level Notes: clipped quotes + free-text analyst commentary -->
+  <div class="notes-panel">
+    <h2 style="margin-top:0">Case Notes</h2>
+    {% if clippings %}
+      <p class="sub">Clipped passages (highlight text and tag as <em>note</em> to add):</p>
+      <ul class="clip-list">
+        {% for c in clippings %}
+          <li>
+            <span class="clip-quote">“{{ c.highlight_text }}”</span>
+            <form method="post" action="{{ url_for('workbench_remove_clip', observation_id=case.observation_id, eei_id=c.eei_id) }}" style="margin:0">
+              <button type="submit" class="clip-remove" title="Remove clipping">remove</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="sub">No clippings yet. Highlight a passage in the text and tag it <em>note</em> to collect it here.</p>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('workbench_save_note', observation_id=case.observation_id) }}">
+      <p class="sub" style="margin-bottom:.3rem">Analyst commentary:</p>
+      <textarea class="note-box" name="analyst_note" placeholder="Write your assessment here…">{{ case.analyst_note or '' }}</textarea>
+      <div style="margin-top:.5rem"><button type="submit" class="btn-sm">Save notes</button></div>
+    </form>
   </div>
 
   <script>

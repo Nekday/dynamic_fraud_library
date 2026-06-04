@@ -102,7 +102,23 @@ def workbench_case(observation_id):
         return redirect(url_for("workbench"))
     eeis = db.get_eei_candidates(observation_id)
     segments = _segment_text(case["captured_text"], eeis)
-    return render_template("workbench_case.html", case=case, eeis=eeis, segments=segments)
+    clippings = db.get_note_clippings(observation_id)
+    return render_template("workbench_case.html", case=case, eeis=eeis,
+                           segments=segments, clippings=clippings)
+
+
+@app.route("/workbench/<int:observation_id>/note", methods=["POST"])
+def workbench_save_note(observation_id):
+    db.save_analyst_note(observation_id, request.form.get("analyst_note", ""))
+    flash("Case notes saved.", "success")
+    return redirect(url_for("workbench_case", observation_id=observation_id))
+
+
+@app.route("/workbench/<int:observation_id>/clip/<int:eei_id>/remove", methods=["POST"])
+def workbench_remove_clip(observation_id, eei_id):
+    db.remove_eei(eei_id)
+    flash("Clipping removed.", "success")
+    return redirect(url_for("workbench_case", observation_id=observation_id))
 
 
 @app.route("/workbench/<int:observation_id>/tag", methods=["POST"])
