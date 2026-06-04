@@ -89,6 +89,24 @@ def systems():
 
 # ---- EEI Workbench (Layer 2: read-only display) ----
 
+@app.route("/fraud-types")
+def fraud_types():
+    return render_template("fraud_types.html", tree=db.list_fraud_type_tree())
+
+
+@app.route("/fraud-types/add", methods=["POST"])
+def fraud_types_add():
+    name = request.form.get("name", "")
+    parent_raw = request.form.get("parent_id", "")
+    parent_id = int(parent_raw) if parent_raw.strip().isdigit() else None
+    new_id = db.add_fraud_type(name, parent_id=parent_id)
+    if new_id:
+        flash(f"Added fraud type “{name.strip()}”.", "success")
+    else:
+        flash("Could not add (empty or duplicate name).", "error")
+    return redirect(url_for("fraud_types"))
+
+
 @app.route("/workbench")
 def workbench():
     return render_template("workbench_list.html", cases=db.list_cases())

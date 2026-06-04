@@ -578,3 +578,70 @@ def save_analyst_note(observation_id, text):
 def remove_eei(eei_id):
     """Delete an EEI candidate (used to un-clip a note or remove a tag)."""
     execute("DELETE FROM eei_candidate WHERE eei_id=%s;", (eei_id,))
+
+
+# ----------------------------------------------------------------------
+#  Fraud-type hierarchy (self-referencing tree)
+# ----------------------------------------------------------------------
+
+def list_fraud_type_tree():
+    """
+    Return all fraud types with parent linkage and depth, ordered for display
+    as an indented tree (top-level alphabetical, children under each parent).
+    Uses a recursive CTE to compute depth and a sortable path.
+    """
+    return query("""
+        WITH RECURSIVE tree AS (
+            SELECT fraud_type_id, name, parent_id, 0 AS depth,
+                   lower(name) AS path
+            FROM fraud_type
+            WHERE parent_id IS NULL
+          UNION ALL
+            SELECT f.fraud_type_id, f.name, f.parent_id, t.depth + 1,
+                   t.path || '>' || lower(f.name)
+            FROM fraud_type f
+            JOIN tree t ON f.parent_id = t.fraud_type_id
+        )
+        SELECT fraud_type_id, name, parent_id, depth, path
+        FROM tree
+        ORDER BY path;
+    """)
+
+
+def get_ancestry(fraud_type_id):
+    """
+    Return the chain from a type up to its root (most specific first), so a
+    case linked to a sub-type can be rolled up to its ACFE parent(s).
+    """
+    return query("""
+        WITH RECURSIVE up AS (
+            SELECT fraud_type_id, name, parent_id, 0 AS step
+            FROM fraud_type WHERE fraud_type_id = %s
+          UNION ALL
+            SELECT f.fraud_type_id, f.name, f.parent_id, u.step + 1
+            FROM fraud_type f
+            JOIN up u ON f.fraud_type_id = u.parent_id
+        )
+        SELECT fraud_type_id, name, parent_id, step FROM up ORDER BY step;
+    """, (fraud_type_id,))
+
+
+def add_fraud_type(name, parent_id=None, summary=None):
+    """
+    Add a new fraud type at any level (parent_id NULL = top-level). summary is
+    NOT NULL in the schema, so a placeholder is used if none supplied.
+    Returns the new fraud_type_id, or None if the name already exists.
+    """
+    name = (name or "").strip()
+    if not name:
+        return None
+    existing = query("SELECT fraud_type_id FROM fraud_type WHERE lower(name)=lower(%s);",
+                     (name,), one=True)
+    if existing:
+        return None
+    row = execute("""
+        INSERT INTO fraud_type (name, parent_id, summary)
+        VALUES (%s, %s, %s)
+        RETURNING fraud_type_id;
+    """, (name, parent_id, summary or f"{name} (added by analyst)"), returning=True)
+    return row["fraud_type_id"] if row else None

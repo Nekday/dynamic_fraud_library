@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Fraud Types · Fraud Taxonomy{% endblock %}
+{% block content %}
+  <style>
+    .ft-tree{list-style:none; padding:0; margin:1rem 0}
+    .ft-tree li{padding:.3rem 0; border-bottom:1px solid var(--line)}
+    .ft-name{font-weight:500}
+    .ft-depth-0 .ft-name{color:var(--accent); font-weight:600}
+    .ft-add{background:var(--panel); border:1px solid var(--line); border-radius:12px;
+            padding:1rem 1.2rem; margin-top:1.4rem; max-width:560px}
+    .ft-add label{display:block; font-size:.85rem; color:var(--muted); margin:.5rem 0 .2rem}
+    .ft-add input, .ft-add select{width:100%; padding:.4rem; background:var(--bg); color:var(--fg);
+            border:1px solid var(--line); border-radius:6px; font-family:inherit}
+    .ft-add button{margin-top:.7rem; font-size:.9rem; padding:.4rem .9rem; border-radius:7px;
+            border:1px solid var(--accent); background:var(--accent); color:#11161d; font-weight:600; cursor:pointer}
+  </style>
+
+  <h1>Fraud Types</h1>
+  <p class="sub">ACFE top-level categories with nested operational typologies. Cases link to the most specific type; analysis rolls up through the tree. Add a new type at any level below.</p>
+
+  <ul class="ft-tree">
+    {% for t in tree %}
+      <li class="ft-depth-{{ t.depth }}" style="padding-left:{{ t.depth * 1.5 }}rem">
+        <span class="ft-name">{{ '› ' * t.depth }}{{ t.name }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+
+  <div class="ft-add">
+    <h2 style="margin-top:0">Add a fraud type</h2>
+    <form method="post" action="{{ url_for('fraud_types_add') }}">
+      <label>Name</label>
+      <input type="text" name="name" placeholder="e.g. Advance-Fee Fraud" required>
+      <label>Parent (leave as “— top level —” for a new ACFE-level category)</label>
+      <select name="parent_id">
+        <option value="">— top level —</option>
+        {% for t in tree %}
+          <option value="{{ t.fraud_type_id }}">{{ '› ' * t.depth }}{{ t.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Add type</button>
+    </form>
+  </div>
+{% endblock %}
