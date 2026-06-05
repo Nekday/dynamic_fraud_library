@@ -37,6 +37,9 @@
     .note-box{width:100%; min-height:120px; background:var(--bg); color:var(--fg);
               border:1px solid var(--line); border-radius:8px; padding:.6rem; font-family:inherit;
               font-size:.92rem; line-height:1.5; resize:vertical}
+    .ft-picker{max-height:240px; overflow:auto; border:1px solid var(--line); border-radius:8px;
+               padding:.5rem .7rem; background:var(--bg)}
+    .ft-picker label{display:block; margin:.12rem 0; cursor:pointer; font-size:.9rem}
     .tag-picker{
       position:fixed; z-index:50; background:var(--panel); border:1px solid var(--accent);
       border-radius:10px; padding:.7rem .8rem; box-shadow:0 8px 30px rgba(0,0,0,.5);
@@ -172,6 +175,53 @@
       <textarea class="note-box" name="analyst_note" placeholder="Write your assessment here…">{{ case.analyst_note or '' }}</textarea>
       <div style="margin-top:.5rem"><button type="submit" class="btn-sm">Save notes</button></div>
     </form>
+  </div>
+
+  <!-- 3c: link case to fraud type(s) + promote approved behavioral/TTP EEIs -->
+  <div class="notes-panel" style="margin-top:1.2rem">
+    <h2 style="margin-top:0">Fraud Types &amp; Library</h2>
+
+    <form method="post" action="{{ url_for('workbench_link_types', observation_id=case.observation_id) }}">
+      <p class="sub">Link this case to its fraud type(s) — pick the most specific that apply; analysis rolls up the tree:</p>
+      <div class="ft-picker">
+        {% for t in tree %}
+          <label style="padding-left:{{ t.depth * 1.2 }}rem">
+            <input type="checkbox" name="fraud_type_ids" value="{{ t.fraud_type_id }}"
+                   {{ 'checked' if t.fraud_type_id in linked_ids }}>
+            {{ '› ' * t.depth }}{{ t.name }}
+          </label>
+        {% endfor %}
+      </div>
+      <button type="submit" class="btn-sm" style="margin-top:.5rem">Link types</button>
+    </form>
+
+    <hr style="border:none; border-top:1px solid var(--line); margin:1rem 0">
+
+    <p class="sub">Promote approved behavioral / TTP EEIs into the signal &amp; TTP library, linked to the type(s) above:</p>
+    {% if not linked_ids %}
+      <p class="empty">Link at least one fraud type first, then promote.</p>
+    {% elif promotable %}
+      <form method="post" action="{{ url_for('workbench_promote', observation_id=case.observation_id) }}">
+        <ul class="clip-list">
+          {% for p in promotable %}
+            <li>
+              <label style="display:flex; gap:.5rem; align-items:flex-start; flex:1">
+                <input type="checkbox" name="promote_eei" value="{{ p.eei_id }}"
+                       {{ 'checked' if not (p.has_signal or p.has_ttp) }}>
+                <span>
+                  <span class="tag-class c-{{ p.eei_class }}">{{ p.classifier_type }}</span>
+                  {{ p.highlight_text }}
+                  {% if p.has_signal or p.has_ttp %}<span class="badge-ok">· already in library</span>{% endif %}
+                </span>
+              </label>
+            </li>
+          {% endfor %}
+        </ul>
+        <button type="submit" class="btn-sm">Promote to library</button>
+      </form>
+    {% else %}
+      <p class="empty">No approved behavioral/TTP EEIs yet. Approve some (or tag passages as behavioral/TTP) to build signals.</p>
+    {% endif %}
   </div>
 
   <script>

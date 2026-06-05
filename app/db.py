@@ -645,3 +645,111 @@ def add_fraud_type(name, parent_id=None, summary=None):
         RETURNING fraud_type_id;
     """, (name, parent_id, summary or f"{name} (added by analyst)"), returning=True)
     return row["fraud_type_id"] if row else None
+
+
+# ----------------------------------------------------------------------
+#  EEI Workbench — 3c: link case to fraud type(s) + promote to library
+# ----------------------------------------------------------------------
+
+def get_case_fraud_types(observation_id):
+    """Fraud types currently linked to a case."""
+    return query("""
+        SELECT ft.fraud_type_id, ft.name
+        FROM observation_fraud_type oft
+        JOIN fraud_type ft ON ft.fraud_type_id = oft.fraud_type_id
+        WHERE oft.observation_id = %s
+        ORDER BY ft.name;
+    """, (observation_id,))
+
+
+def set_case_fraud_types(observation_id, fraud_type_ids):
+    """Replace the set of fraud types linked to a case with the given list."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM observation_fraud_type WHERE observation_id=%s;",
+                        (observation_id,))
+            for ft_id in fraud_type_ids:
+                cur.execute("""INSERT INTO observation_fraud_type (observation_id, fraud_type_id)
+                               VALUES (%s,%s) ON CONFLICT DO NOTHING;""",
+                            (observation_id, ft_id))
+        conn.commit()
+
+
+def get_promotable_eeis(observation_id):
+    """
+    Approved behavioral/ttp EEIs for a case that haven't yet been promoted to
+    every linked type. Returns each with a flag of whether it's already promoted.
+    """
+    return query("""
+        SELECT e.eei_id, e.classifier_type, e.eei_class, e.highlight_text,
+               EXISTS (SELECT 1 FROM eei_signal_link sl WHERE sl.eei_id=e.eei_id) AS has_signal,
+               EXISTS (SELECT 1 FROM eei_ttp_link tl WHERE tl.eei_id=e.eei_id) AS has_ttp
+        FROM eei_candidate e
+        WHERE e.observation_id=%s
+          AND e.status='approved'
+          AND e.eei_class IN ('behavioral','ttp')
+        ORDER BY e.start_offset NULLS LAST, e.eei_id;
+    """, (observation_id,))
+
+
+def promote_eeis_to_library(observation_id, eei_ids):
+    """
+    Promote the given approved behavioral/ttp EEIs into the signal/ttp library,
+    linked to each fraud type the case is currently linked to. One EEI becomes
+    one row per linked type. Deduped via the eei_signal_link / eei_ttp_link
+    provenance tables so re-running doesn't create duplicates.
+
+    Returns a summary dict.
+    """
+    summary = {"signals": 0, "ttps": 0, "skipped_no_types": 0}
+    types = get_case_fraud_types(observation_id)
+    if not types:
+        summary["skipped_no_types"] = len(eei_ids)
+        return summary
+    type_ids = [t["fraud_type_id"] for t in types]
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            for eei_id in eei_ids:
+                cur.execute("""SELECT eei_class, highlight_text, classifier_type
+                               FROM eei_candidate WHERE eei_id=%s AND observation_id=%s
+                                 AND status='approved';""", (eei_id, observation_id))
+                row = cur.fetchone()
+                if not row:
+                    continue
+                text = row["highlight_text"] or ""
+                label = (text[:60] + "…") if len(text) > 60 else text
+
+                for ft_id in type_ids:
+                    if row["eei_class"] == "behavioral":
+                        # avoid duplicate signal for same (eei, type) pair
+                        cur.execute("""SELECT s.signal_id FROM signal s
+                                       JOIN eei_signal_link l ON l.signal_id=s.signal_id
+                                       WHERE l.eei_id=%s AND s.fraud_type_id=%s;""",
+                                    (eei_id, ft_id))
+                        if cur.fetchone():
+                            continue
+                        cur.execute("""INSERT INTO signal
+                                         (fraud_type_id, signal_class, name, detection_heuristic)
+                                       VALUES (%s,'behavioral',%s,%s) RETURNING signal_id;""",
+                                    (ft_id, label, text))
+                        sig_id = cur.fetchone()["signal_id"]
+                        cur.execute("""INSERT INTO eei_signal_link (eei_id, signal_id)
+                                       VALUES (%s,%s) ON CONFLICT DO NOTHING;""", (eei_id, sig_id))
+                        summary["signals"] += 1
+                    elif row["eei_class"] == "ttp":
+                        cur.execute("""SELECT t.ttp_id FROM ttp t
+                                       JOIN eei_ttp_link l ON l.ttp_id=t.ttp_id
+                                       WHERE l.eei_id=%s AND t.fraud_type_id=%s;""",
+                                    (eei_id, ft_id))
+                        if cur.fetchone():
+                            continue
+                        cur.execute("""INSERT INTO ttp (fraud_type_id, technique, description)
+                                       VALUES (%s,%s,%s) RETURNING ttp_id;""",
+                                    (ft_id, label, text))
+                        ttp_id = cur.fetchone()["ttp_id"]
+                        cur.execute("""INSERT INTO eei_ttp_link (eei_id, ttp_id)
+                                       VALUES (%s,%s) ON CONFLICT DO NOTHING;""", (eei_id, ttp_id))
+                        summary["ttps"] += 1
+        conn.commit()
+    return summary

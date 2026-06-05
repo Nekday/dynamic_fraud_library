@@ -121,8 +121,42 @@ def workbench_case(observation_id):
     eeis = db.get_eei_candidates(observation_id)
     segments = _segment_text(case["captured_text"], eeis)
     clippings = db.get_note_clippings(observation_id)
+    tree = db.list_fraud_type_tree()
+    linked = db.get_case_fraud_types(observation_id)
+    linked_ids = [t["fraud_type_id"] for t in linked]
+    promotable = db.get_promotable_eeis(observation_id)
     return render_template("workbench_case.html", case=case, eeis=eeis,
-                           segments=segments, clippings=clippings)
+                           segments=segments, clippings=clippings,
+                           tree=tree, linked=linked, linked_ids=linked_ids,
+                           promotable=promotable)
+
+
+@app.route("/workbench/<int:observation_id>/link-types", methods=["POST"])
+def workbench_link_types(observation_id):
+    ids = []
+    for v in request.form.getlist("fraud_type_ids"):
+        if v.strip().isdigit():
+            ids.append(int(v))
+    db.set_case_fraud_types(observation_id, ids)
+    flash(f"Linked {len(ids)} fraud type(s) to this case.", "success")
+    return redirect(url_for("workbench_case", observation_id=observation_id))
+
+
+@app.route("/workbench/<int:observation_id>/promote", methods=["POST"])
+def workbench_promote(observation_id):
+    eei_ids = []
+    for v in request.form.getlist("promote_eei"):
+        if v.strip().isdigit():
+            eei_ids.append(int(v))
+    if not eei_ids:
+        flash("No EEIs selected to promote.", "info")
+        return redirect(url_for("workbench_case", observation_id=observation_id))
+    s = db.promote_eeis_to_library(observation_id, eei_ids)
+    if s["skipped_no_types"]:
+        flash("Link the case to at least one fraud type before promoting.", "error")
+    else:
+        flash(f"Promoted to library: {s['signals']} signal(s), {s['ttps']} TTP(s).", "success")
+    return redirect(url_for("workbench_case", observation_id=observation_id))
 
 
 @app.route("/workbench/<int:observation_id>/note", methods=["POST"])
