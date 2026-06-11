@@ -34,7 +34,12 @@ STIX_MAP = {
 
 @app.context_processor
 def inject_globals():
-    return {"stix_map": STIX_MAP}
+    # `pending` drives the nav badge (Workbench parent + Intake Gate child) on
+    # EVERY page, so it's computed here rather than per-route. Previously only
+    # the index route passed it, so the badge was stale/absent elsewhere.
+    counts = db.staging_counts()
+    pending = sum(c["n"] for c in counts if c["status"] == "pending")
+    return {"stix_map": STIX_MAP, "pending": pending}
 
 
 @app.route("/")
@@ -42,15 +47,12 @@ def index():
     search = request.args.get("q", "").strip() or None
     ai = request.args.get("ai", "").strip() or None
     types = db.list_fraud_types(search=search, ai_leverage=ai)
-    counts = db.staging_counts()
-    pending = sum(c["n"] for c in counts if c["status"] == "pending")
     return render_template(
         "index.html",
         fraud_types=types,
         ai_values=db.ai_leverage_values(),
         search=search or "",
         ai_selected=ai or "",
-        pending=pending,
     )
 
 

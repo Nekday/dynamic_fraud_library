@@ -335,6 +335,34 @@ def get_eei_candidates(observation_id):
 # recorded as approved but not promoted. 'behavioral'/'ttp' are handled later.
 _SELECTOR_TYPES = {"email", "phone", "url", "domain", "ip"}
 
+# Deterministic classifier types that are NOT IOCs even though the extractor
+# classes them as eei_class='selector' (for highlighting). Amounts are case
+# facts, not identifiers — they must never promote to selector_value.
+_NON_IOC_SELECTOR_TYPES = {"amount"}
+
+
+def _promotable_selector_subtype(eei_class, classifier_type):
+    """
+    Decide whether an approved EEI should promote into the Identifying
+    Selectors library (selector_value), and under which selector_type.
+
+    Returns the selector_type string to store, or None if not promotable.
+      * Gate is eei_class == 'selector' — NOT classifier_type membership.
+        (The old gate `classifier_type in _SELECTOR_TYPES` left human-tagged
+        generic 'selector' EEIs in a dead zone: approved but never promoted.)
+      * Concrete IOC types (email/phone/url/domain/ip) keep their subtype.
+      * Human-tagged generic 'selector' EEIs (names, aliases, wallets the
+        regex missed) promote with subtype 'other'.
+      * 'amount' never promotes — recorded as a case fact only.
+    """
+    if eei_class != "selector":
+        return None
+    if classifier_type in _NON_IOC_SELECTOR_TYPES:
+        return None
+    if classifier_type in _SELECTOR_TYPES:
+        return classifier_type
+    return "other"
+
 
 def get_eei(eei_id):
     return query("SELECT * FROM eei_candidate WHERE eei_id = %s;", (eei_id,), one=True)
@@ -352,10 +380,11 @@ def reject_eei(eei_id):
 def approve_eei(eei_id):
     """
     Approve a single EEI candidate.
-      * Selector types (email/phone/url/domain/ip) -> upsert into selector_value,
-        link the candidate to the created/existing selector row.
-      * Other types (amount, behavioral, ttp) -> just mark approved (recorded as
-        a confirmed case fact; not promoted to selector_value).
+      * Selector-class EEIs (except 'amount') -> upsert into selector_value,
+        link the candidate to the created/existing selector row. Concrete
+        types keep their subtype; human-tagged generics store as 'other'.
+      * Other types (amount, behavioral, ttp, note) -> just mark approved
+        (recorded as a confirmed case fact; not promoted to selector_value).
     Done in one transaction so the candidate and any selector row stay consistent.
     """
     with get_conn() as conn:
@@ -364,15 +393,15 @@ def approve_eei(eei_id):
             row = cur.fetchone()
             if not row:
                 return None
-            ctype = row["classifier_type"]
             value = row["matched_value"] or row["highlight_text"]
+            subtype = _promotable_selector_subtype(row["eei_class"], row["classifier_type"])
 
             selector_id = None
-            if ctype in _SELECTOR_TYPES and value:
+            if subtype and value:
                 # Upsert: reuse an existing selector with same (type,value), else create.
                 cur.execute(
                     "SELECT selector_id FROM selector_value WHERE selector_type=%s AND value=%s;",
-                    (ctype, value),
+                    (subtype, value),
                 )
                 hit = cur.fetchone()
                 if hit:
@@ -384,7 +413,7 @@ def approve_eei(eei_id):
                         VALUES (%s, %s, %s, now())
                         RETURNING selector_id;
                         """,
-                        (ctype, value, f"from observation #{row['observation_id']}"),
+                        (subtype, value, f"from observation #{row['observation_id']}"),
                     )
                     selector_id = cur.fetchone()["selector_id"]
 
@@ -447,11 +476,11 @@ def apply_eei_decisions(observation_id, decisions):
 
                 if target == "approved":
                     selector_id = row.get("promoted_selector_id")
-                    ctype = row["classifier_type"]
                     value = row["matched_value"] or row["highlight_text"]
-                    if ctype in _SELECTOR_TYPES and value and not selector_id:
+                    subtype = _promotable_selector_subtype(row["eei_class"], row["classifier_type"])
+                    if subtype and value and not selector_id:
                         cur.execute("SELECT selector_id FROM selector_value WHERE selector_type=%s AND value=%s;",
-                                    (ctype, value))
+                                    (subtype, value))
                         hit = cur.fetchone()
                         if hit:
                             selector_id = hit["selector_id"]
@@ -459,7 +488,7 @@ def apply_eei_decisions(observation_id, decisions):
                             cur.execute(
                                 """INSERT INTO selector_value (selector_type, value, context, created_at)
                                    VALUES (%s,%s,%s, now()) RETURNING selector_id;""",
-                                (ctype, value, f"from observation #{observation_id}"))
+                                (subtype, value, f"from observation #{observation_id}"))
                             selector_id = cur.fetchone()["selector_id"]
                             summary["promoted"] += 1
                     cur.execute("""UPDATE eei_candidate

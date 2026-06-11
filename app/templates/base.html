@@ -34,9 +34,38 @@
     }
     .brand{font-family:"Spectral",serif; font-weight:700; font-size:1.25rem; letter-spacing:.3px}
     .brand .dot{color:var(--accent)}
-    nav.top-nav{display:flex; gap:1rem; margin-left:auto; flex-wrap:wrap}
+    nav.top-nav{display:flex; gap:1.1rem; margin-left:auto; flex-wrap:wrap; align-items:center}
     nav.top-nav a{font-size:.92rem; padding:.3rem .1rem; border-bottom:2px solid transparent}
     nav.top-nav a.active{color:var(--accent); border-bottom-color:var(--accent)}
+    /* ---- grouped dropdown nav ---- */
+    .nav-group{position:relative}
+    .nav-group > .nav-parent{
+      display:inline-flex; align-items:center; gap:.3rem; cursor:default;
+      font-size:.92rem; padding:.3rem .1rem; border-bottom:2px solid transparent;
+      color:var(--text); user-select:none;
+    }
+    .nav-group > .nav-parent .caret{font-size:.55rem; color:var(--muted); transform:translateY(1px)}
+    .nav-group:hover > .nav-parent,
+    .nav-group:focus-within > .nav-parent{color:var(--accent)}
+    .nav-group > .nav-parent.active{color:var(--accent); border-bottom-color:var(--accent)}
+    .dropdown{
+      position:absolute; top:100%; left:50%; transform:translateX(-50%);
+      min-width:230px; padding-top:.45rem; display:none; z-index:30;
+    }
+    .dropdown-panel{
+      background:var(--panel); border:1px solid var(--line); border-radius:10px;
+      padding:.4rem; display:flex; flex-direction:column; gap:.1rem;
+      box-shadow:0 10px 28px rgba(0,0,0,.5);
+    }
+    .nav-group:hover .dropdown,
+    .nav-group:focus-within .dropdown{display:block}
+    .dropdown a{
+      padding:.5rem .75rem; border-radius:7px; border-bottom:none; font-size:.9rem;
+      display:flex; align-items:center; justify-content:space-between; gap:.6rem;
+      color:var(--text); white-space:nowrap;
+    }
+    .dropdown a:hover{background:var(--panel-2); color:var(--accent)}
+    .dropdown a.active{color:var(--accent); background:rgba(216,166,87,.08); border-bottom:none}
     .badge{
       background:var(--accent); color:#1a1206; border-radius:10px;
       font-size:.72rem; font-weight:600; padding:.05rem .45rem; margin-left:.3rem;
@@ -102,13 +131,40 @@
   <header class="top">
     <span class="brand">Fraud&nbsp;Taxonomy<span class="dot">.</span></span>
     <nav class="top-nav">
-      <a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint=='index' }}">Types</a>
-      <a href="{{ url_for('signals') }}" class="{{ 'active' if request.endpoint=='signals' }}">Signals</a>
-      <a href="{{ url_for('selectors') }}" class="{{ 'active' if request.endpoint=='selectors' }}">Selectors</a>
-      <a href="{{ url_for('systems') }}" class="{{ 'active' if request.endpoint=='systems' }}">Systems</a>
-      <a href="{{ url_for('fraud_types') }}" class="{{ 'active' if request.endpoint in ['fraud_types'] }}">Fraud Types</a>
-      <a href="{{ url_for('workbench') }}" class="{{ 'active' if request.endpoint in ['workbench','workbench_case'] }}">Workbench</a>
-      <a href="{{ url_for('review') }}" class="{{ 'active' if request.endpoint=='review' }}">Review{% if pending %}<span class="badge">{{ pending }}</span>{% endif %}</a>
+
+      {# ---- Fraud Types: the typology taxonomy ---- #}
+      {% set ft_active = request.endpoint in ['index', 'fraud_type_detail', 'fraud_types'] %}
+      <div class="nav-group">
+        <span class="nav-parent {{ 'active' if ft_active }}" tabindex="0">Fraud Types <span class="caret">&#9662;</span></span>
+        <div class="dropdown"><div class="dropdown-panel">
+          <a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint in ['index','fraud_type_detail'] }}">Fraud Library Cards</a>
+          <a href="{{ url_for('fraud_types') }}" class="{{ 'active' if request.endpoint=='fraud_types' }}">Fraud Family Tree</a>
+        </div></div>
+      </div>
+
+      {# ---- Operational Data: the detection library ---- #}
+      {% set od_active = request.endpoint in ['selectors', 'signals'] %}
+      <div class="nav-group">
+        <span class="nav-parent {{ 'active' if od_active }}" tabindex="0">Operational Data <span class="caret">&#9662;</span></span>
+        <div class="dropdown"><div class="dropdown-panel">
+          <a href="{{ url_for('selectors') }}" class="{{ 'active' if request.endpoint=='selectors' }}">Identifying Selectors</a>
+          <a href="{{ url_for('signals') }}" class="{{ 'active' if request.endpoint=='signals' }}">Activity Detection Signals</a>
+        </div></div>
+      </div>
+
+      {# ---- Workbench: the sequential analyst workflow (intake -> analysis) ---- #}
+      {% set wb_active = request.endpoint in ['review', 'workbench', 'workbench_case'] %}
+      <div class="nav-group">
+        <span class="nav-parent {{ 'active' if wb_active }}" tabindex="0">Workbench{% if pending %}<span class="badge">{{ pending }}</span>{% endif %} <span class="caret">&#9662;</span></span>
+        <div class="dropdown"><div class="dropdown-panel">
+          <a href="{{ url_for('review') }}" class="{{ 'active' if request.endpoint=='review' }}">Intake Gate{% if pending %}<span class="badge">{{ pending }}</span>{% endif %}</a>
+          <a href="{{ url_for('workbench') }}" class="{{ 'active' if request.endpoint in ['workbench','workbench_case'] }}">New Case Analysis</a>
+        </div></div>
+      </div>
+
+      {# ---- External Stakeholders: the external-system registry ---- #}
+      <a href="{{ url_for('systems') }}" class="{{ 'active' if request.endpoint=='systems' }}">External Stakeholders</a>
+
     </nav>
   </header>
   <main>
